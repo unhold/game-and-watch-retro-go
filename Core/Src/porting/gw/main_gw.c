@@ -1,6 +1,7 @@
 #include <odroid_system.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 #include "main.h"
 #include "gw_lcd.h"
@@ -13,9 +14,12 @@
 
 #include "common.h"
 #include "rom_manager.h"
+#include "rg_i18n.h"
+#include "gui.h"
 
 /* G&W system support */
 #include "gw_system.h"
+#include "gw_romloader.h"
 
 /* access to internals for debug purpose */
 #include "sm510.h"
@@ -23,13 +27,87 @@
 /* Uncomment to enable debug menu in overlay */
 //#define GW_EMU_DEBUG_OVERLAY
 
+
 #define ODROID_APPID_GW 6
 
 /* Audio buffer length */
 #define GW_AUDIO_BUFFER_LENGTH_DMA ((2 * GW_AUDIO_FREQ) / GW_REFRESH_RATE)
 
+/* keys inpus (hw & sw) */
 static odroid_gamepad_state_t joystick;
+static bool softkey_time_pressed = 0;
+static bool softkey_alarm_pressed = 0;
+static bool softkey_A_pressed = 0;
+static bool softkey_only = 0;
 
+static unsigned int softkey_duration = 0;
+
+static void gw_set_time() {
+
+    // Get time. According to STM docs, both functions need to be called at once.
+    RTC_TimeTypeDef GW_currentTime = {0};
+    RTC_DateTypeDef GW_currentDate = {0};
+    gw_time_t time;
+    HAL_RTC_GetTime(&hrtc, &GW_currentTime, RTC_FORMAT_BIN);
+    HAL_RTC_GetDate(&hrtc, &GW_currentDate, RTC_FORMAT_BIN);
+    time.hours = GW_currentTime.Hours;
+    time.minutes = GW_currentTime.Minutes;
+    time.seconds = GW_currentTime.Seconds;
+
+    // set time of the emulated system
+    gw_system_set_time(time);
+    printf("Set time done!\n");
+}
+
+static void gw_get_time() {
+
+    // Update time before we can set it
+    RTC_TimeTypeDef GW_currentTime = {0};
+    RTC_DateTypeDef GW_currentDate = {0};
+    gw_time_t time = {0};
+
+    // check if the system is able to get the time
+
+    time = gw_system_get_time();
+    if (time.hours > 24) return;
+
+    HAL_RTC_GetTime(&hrtc, &GW_currentTime, RTC_FORMAT_BIN);
+    HAL_RTC_GetDate(&hrtc, &GW_currentDate, RTC_FORMAT_BIN);
+
+    // Set times
+    GW_currentTime.Hours = time.hours;
+    GW_currentTime.Minutes = time.minutes;
+    GW_currentTime.Seconds = time.seconds;
+
+    if (HAL_RTC_SetTime(&hrtc, &GW_currentTime, RTC_FORMAT_BIN) != HAL_OK)
+    {
+        Error_Handler();
+    }
+}
+
+static void gw_check_time() {
+
+    static unsigned int is_gw_time_sync=0;
+
+    // Update time before we can set it
+    RTC_TimeTypeDef GW_currentTime = {0};
+    RTC_DateTypeDef GW_currentDate = {0};
+    gw_time_t time = {0};
+
+    HAL_RTC_GetTime(&hrtc, &GW_currentTime, RTC_FORMAT_BIN);
+    HAL_RTC_GetDate(&hrtc, &GW_currentDate, RTC_FORMAT_BIN);
+
+    // Set times
+    time.hours = GW_currentTime.Hours;
+    time.minutes = GW_currentTime.Minutes;
+    time.seconds = GW_currentTime.Seconds;
+
+    // update time every 30s
+    if ( (time.seconds == 30) || (is_gw_time_sync==0) ) {
+        is_gw_time_sync = 1;
+        gw_system_set_time(time);
+    }
+}
 static unsigned char state_save_buffer[sizeof(gw_state_t)];
 
 static bool gw_system_SaveState(char *pathName)
@@ -39,32 +117,41 @@ static bool gw_system_SaveState(char *pathName)
     memset(state_save_buffer, '\x00', sizeof(state_save_buffer));
     gw_state_save(state_save_buffer);
     store_save(ACTIVE_FILE->save_address, state_save_buffer, sizeof(state_save_buffer));
-    printf("Saving state done!\n");
     return false;
 }
 
 static bool gw_system_LoadState(char *pathName)
 {
     printf("Loading state...\n");
-    gw_state_load((unsigned char *) ACTIVE_FILE->save_address);
-    printf("Loading state done!\n");
-    return true;
+    return gw_state_load((unsigned char *)(ACTIVE_FILE->save_address));
+
 }
 
 /* callback to get buttons state */
 unsigned int gw_get_buttons()
 {
     unsigned int hw_buttons = 0;
-    hw_buttons |= joystick.values[ODROID_INPUT_LEFT];
-    hw_buttons |= joystick.values[ODROID_INPUT_UP] << 1;
-    hw_buttons |= joystick.values[ODROID_INPUT_RIGHT] << 2;
-    hw_buttons |= joystick.values[ODROID_INPUT_DOWN] << 3;
-    hw_buttons |= joystick.values[ODROID_INPUT_A] << 4;
-    hw_buttons |= joystick.values[ODROID_INPUT_B] << 5;
-    hw_buttons |= joystick.values[ODROID_INPUT_SELECT] << 6;
-    hw_buttons |= joystick.values[ODROID_INPUT_START] << 7;
-    hw_buttons |= joystick.values[ODROID_INPUT_VOLUME] << 8;
-    hw_buttons |= joystick.values[ODROID_INPUT_POWER] << 9;
+    if (!softkey_only)
+    {
+        hw_buttons |= joystick.values[ODROID_INPUT_LEFT];
+        hw_buttons |= joystick.values[ODROID_INPUT_UP] << 1;
+        hw_buttons |= joystick.values[ODROID_INPUT_RIGHT] << 2;
+        hw_buttons |= joystick.values[ODROID_INPUT_DOWN] << 3;
+        hw_buttons |= joystick.values[ODROID_INPUT_A] << 4;
+        hw_buttons |= joystick.values[ODROID_INPUT_B] << 5;
+        hw_buttons |= joystick.values[ODROID_INPUT_SELECT] << 6;
+        hw_buttons |= joystick.values[ODROID_INPUT_START] << 7;
+        hw_buttons |= joystick.values[ODROID_INPUT_VOLUME] << 8;
+        hw_buttons |= joystick.values[ODROID_INPUT_POWER] << 9;
+        hw_buttons |= joystick.values[ODROID_INPUT_X] << 10;
+        hw_buttons |= joystick.values[ODROID_INPUT_Y] << 11;
+    }
+
+    // software keys
+    hw_buttons |= ((unsigned int)softkey_A_pressed) << 4;
+    hw_buttons |= ((unsigned int)softkey_time_pressed) << 10;
+    hw_buttons |= ((unsigned int)softkey_alarm_pressed) << 11;
+
     return hw_buttons;
 }
 
@@ -196,20 +283,147 @@ static void gw_debug_bar()
     else
         sprintf(debugMsg, "%04dus EMU:%04dus FX:%04dus %d%%+%d", loop_duration_us, proc_duration_us, blit_duration_us, busy_percent, overflow_count);
 
-    odroid_overlay_draw_text(0, 0, GW_SCREEN_WIDTH, debugMsg, C_GW_YELLOW, C_GW_MAIN_COLOR);
+    odroid_overlay_draw_text(0, 0, GW_SCREEN_WIDTH, debugMsg, curr_colors->sel_c, curr_colors->main_c);
 
 #endif
 }
 /************************ Debug function in overlay END ********************************/
 
+/************************ G&W options Menu ********************************/
+// Press Auto Clear ACL
+// Auto Set Time
+// Press TIME
+// Press ALARM
+
+static bool gw_debug_submenu_autoclear(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
+{
+    if (event == ODROID_DIALOG_ENTER)
+        gw_system_reset();
+
+    return event == ODROID_DIALOG_ENTER;
+}
+
+static bool gw_debug_submenu_autoset_time(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
+{
+
+    if (event == ODROID_DIALOG_ENTER)
+    {
+        gw_set_time();
+    }
+
+    return event == ODROID_DIALOG_ENTER;
+}
+
+static bool gw_debug_submenu_autoget_time(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
+{
+
+    if (event == ODROID_DIALOG_ENTER)
+    {
+        gw_get_time();
+    }
+
+    return event == ODROID_DIALOG_ENTER;
+}
+
+static bool gw_debug_submenu_press_time(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
+{
+    if (event == ODROID_DIALOG_ENTER)
+    {
+        softkey_time_pressed = 1;
+        softkey_duration = GW_REFRESH_RATE;
+    }
+    return event == ODROID_DIALOG_ENTER;
+}
+
+static bool gw_debug_submenu_press_alarm(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
+{
+    if (event == ODROID_DIALOG_ENTER)
+    {
+        softkey_alarm_pressed = 1;
+        softkey_duration = GW_REFRESH_RATE;
+    }
+    return event == ODROID_DIALOG_ENTER;
+}
+
+
+static char LCD_deflicker_value[10];
+static bool gw_debug_submenu_set_deflicker(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
+{
+    /* LCD deflicker filter level */
+    /*
+    0 : filter is disabled
+    1 : refreshed on keys polling and call subroutine return
+    2 : refreshed on keys polling only
+    */
+    unsigned int max_flag_lcd_deflicker_level = 2;
+
+    if (event == ODROID_DIALOG_PREV)
+        flag_lcd_deflicker_level = flag_lcd_deflicker_level > 0 ? flag_lcd_deflicker_level - 1 : max_flag_lcd_deflicker_level;
+
+    if (event == ODROID_DIALOG_NEXT)
+        flag_lcd_deflicker_level = flag_lcd_deflicker_level < max_flag_lcd_deflicker_level ? flag_lcd_deflicker_level + 1 : 0;
+
+    if (flag_lcd_deflicker_level == 0) strcpy(option->value, curr_lang->s_filter_0_none);
+    if (flag_lcd_deflicker_level == 1) strcpy(option->value, curr_lang->s_filter_1_medium);
+    if (flag_lcd_deflicker_level == 2) strcpy(option->value, curr_lang->s_filter_2_high);
+
+    return event == ODROID_DIALOG_ENTER;
+}
+
+// Debug menu strings
+
+static char display_ram_value[10];
+
+// Display RAM bool
+static unsigned int debug_display_ram = 0;
+static bool gw_debug_submenu_display_ram(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
+{
+    if (event == ODROID_DIALOG_PREV || event == ODROID_DIALOG_NEXT)
+        debug_display_ram = debug_display_ram == 0 ? 1 : 0;
+
+    if (debug_display_ram == 0) strcpy(option->value, curr_lang->s_No);
+    if (debug_display_ram == 1) strcpy(option->value, curr_lang->s_Yes);
+
+    return event == ODROID_DIALOG_ENTER;
+}
+
+static char draw_line_content[1+2*17];
+
+static void gw_display_ram_overlay(){
+
+  //  char *p;
+   // p = (char *)&draw_line_content[0];
+    sprintf(draw_line_content, "   0 1 2 3 4 5 6 7 8 9 A B C D E F");
+    odroid_overlay_draw_text(10, 72, 300, draw_line_content, curr_colors->sel_c, curr_colors->main_c);
+
+    for (unsigned char i=0;i<8;i++) {
+        sprintf(draw_line_content, "%2u%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x",i, \
+        gw_ram[i*16], gw_ram[(i*16)+1], gw_ram[(i*16)+2],gw_ram[(i*16)+3],gw_ram[(i*16)+4],gw_ram[(i*16)+5],gw_ram[(i*16)+6],gw_ram[(i*16)+7], \
+        gw_ram[(i*16)+8], gw_ram[(i*16)+9], gw_ram[(i*16)+10],gw_ram[(i*16)+11],gw_ram[(i*16)+12],gw_ram[(i*16)+13],gw_ram[(i*16)+14],gw_ram[(i*16)+15]);
+    odroid_overlay_draw_text(10, 80+8*i, 300, draw_line_content, curr_colors->sel_c, curr_colors->main_c);
+    }
+}
+
+
 /* Main */
 int app_main_gw(uint8_t load_state)
 {
 
-    odroid_system_init(APPID_GW, GW_AUDIO_FREQ);
-    odroid_system_emu_init(&gw_system_LoadState, &gw_system_SaveState, NULL);
+    odroid_dialog_choice_t options[] = {
+        ODROID_DIALOG_CHOICE_SEPARATOR,
+        {309, curr_lang->s_Press_ACL, "", 1, &gw_debug_submenu_autoclear},
+        {310, curr_lang->s_Press_TIME, "", 1, &gw_debug_submenu_press_time},
+        {320, curr_lang->s_Press_ALARM, "", 1, &gw_debug_submenu_press_alarm},
+        {330, curr_lang->s_copy_RTC_to_GW_time, "", 1, &gw_debug_submenu_autoset_time},
+        {331, curr_lang->s_copy_GW_time_to_RTC, "", 1, &gw_debug_submenu_autoget_time},
+        {360, curr_lang->s_LCD_filter, LCD_deflicker_value, 1, &gw_debug_submenu_set_deflicker},
+        {370, curr_lang->s_Display_RAM, display_ram_value, 1, &gw_debug_submenu_display_ram},
+        ODROID_DIALOG_CHOICE_LAST};
 
-    // const int frameTime = get_frame_time(GW_REFRESH_RATE);
+    odroid_system_init(ODROID_APPID_GW, GW_AUDIO_FREQ);
+    odroid_system_emu_init(&gw_system_LoadState, &gw_system_SaveState, NULL);
+    //rg_app_desc_t *app = odroid_system_get_app();
+    static unsigned previous_m_halt = 2;
 
     common_emu_state.frame_time_10us = (uint16_t)(100000 / GW_REFRESH_RATE + 0.5f);
 
@@ -223,6 +437,11 @@ int app_main_gw(uint8_t load_state)
     gw_sound_init();
     printf("Sound initialized\n");
 
+    /* clear soft keys */
+    softkey_time_pressed = 0;
+    softkey_alarm_pressed = 0;
+    softkey_duration = 0;
+
     /*** Configure the emulated system */
     gw_system_config();
     printf("G&W configured\n");
@@ -234,12 +453,55 @@ int app_main_gw(uint8_t load_state)
     gw_system_reset();
     printf("G&W reset\n");
 
+    /* check if we have to load state */
+    bool LoadState_done = false;
+    if (load_state != 0) {
+        LoadState_done = gw_system_LoadState(NULL);
+        if (LoadState_done) {
+            gw_check_time();
+            gw_set_time();
+        }
+    }
+
+    /* emulate watch mode */
+    if (!LoadState_done) {
+        softkey_time_pressed = 0;
+        softkey_alarm_pressed = 0;
+        softkey_A_pressed = 0;
+
+        // disable user keys
+        softkey_only = 1;
+
+        printf("G&W emulate watch mode\n");
+
+        gw_system_reset();
+
+        // From reset state : run
+        gw_system_run(GW_AUDIO_FREQ*2);
+
+        // press TIME to exit TIME settings mode
+        softkey_time_pressed = 1;
+        gw_system_run(GW_AUDIO_FREQ/2);
+        softkey_time_pressed = 0;
+        gw_system_run(GW_AUDIO_FREQ*2);
+
+        // synchronize G&W with RTC and run
+        gw_check_time();
+        gw_set_time();
+        gw_system_run(GW_AUDIO_FREQ);
+
+        // press A required by some game
+        softkey_A_pressed = 1;
+        gw_system_run(GW_AUDIO_FREQ/2);
+        softkey_A_pressed = 0;
+        gw_system_run(GW_AUDIO_FREQ);
+
+        // enable user keys
+        softkey_only = 0;
+    }
+
     /*** Main emulator loop */
     printf("Main emulator loop start\n");
-
-    /* check if we to have to load state */
-    if (load_state != 0)
-        gw_system_LoadState(NULL);
 
     clear_dwt_cycles();
 
@@ -250,10 +512,24 @@ int app_main_gw(uint8_t load_state)
 
         wdog_refresh();
 
+        /* refresh internal G&W timer on emulated CPU state transition */
+        if (previous_m_halt != m_halt) gw_check_time();
+
+        previous_m_halt = m_halt;
+
+        //hardware keys
         odroid_input_read_gamepad(&joystick);
-        odroid_dialog_choice_t options[] = {
-            ODROID_DIALOG_CHOICE_LAST
-        };
+
+        //soft keys emulation
+        if (softkey_duration > 0)
+            softkey_duration--;
+
+        if (softkey_duration == 0)
+        {
+            softkey_time_pressed = 0;
+            softkey_alarm_pressed = 0;
+        }
+
         common_emu_input_loop(&joystick, options);
 
         bool drawFrame = common_emu_frame_loop();
@@ -271,6 +547,7 @@ int app_main_gw(uint8_t load_state)
         {
             gw_system_blit(lcd_get_active_buffer());
             gw_debug_bar();
+            if(debug_display_ram == 1) gw_display_ram_overlay();
             common_ingame_overlay();
             lcd_swap();
 
@@ -280,23 +557,26 @@ int app_main_gw(uint8_t load_state)
         /****************************************************************************/
 
         /* copy audio samples for DMA */
-        if (drawFrame) {
+        if (drawFrame)
+        {
             gw_sound_submit();
         }
 
         /* get how many cycles have been spent to process everything */
         end_cycles = get_dwt_cycles();
 
-        if(!common_emu_state.skip_frames)
+        if (!common_emu_state.skip_frames)
         {
-            for(uint8_t p = 0; p < common_emu_state.pause_frames + 1; p++) {
+            for (uint8_t p = 0; p < common_emu_state.pause_frames + 1; p++)
+            {
                 static dma_transfer_state_t last_dma_state = DMA_TRANSFER_STATE_HF;
-                while (dma_state == last_dma_state) {
-                    #ifdef GW_EMU_DEBUG_OVERLAY
+                while (dma_state == last_dma_state)
+                {
+#ifdef GW_EMU_DEBUG_OVERLAY
                     __NOP();
-                    #else
+#else
                     cpumon_sleep();
-                    #endif
+#endif
                 }
                 last_dma_state = dma_state;
             }

@@ -1,3 +1,67 @@
+![](assets/gnw.gif)
+
+# NewUI howto
+Please run `make help` to see more information.
+
+最新 Game Genie 以及基于 Game Genie 基础之上的 PCE Rom Patcher 已经可以支持中文化。从 [https://github.com/olderzeus/game-genie-codes-nes/tree/zh_cn](https://github.com/olderzeus/game-genie-codes-nes/tree/zh_cn) 可以查阅或自定义相关文件。
+
+:exclamation::exclamation::exclamation: 任何时候都 **不要** 连接 stlink 的 VCC 和 Game & Watch 主板的 VDD 脚 :exclamation::exclamation::exclamation:
+
+一般情况下只需要连接 GND，SWDIO，SWCLK 3个针脚即可。
+
+来自[apple524](https://github.com/apple524)的 ubuntu 刷机攻略：
+[Game & Watch 刷机完全教程](https://apple524.github.io/2022/04/03/g-w-hack/)
+
+來自[maxxkao](http://maxxkao.blogspot.com/)的刷機攻略：
+
+[Nintendo Game & Watch 刷機完全攻略](https://maxxkao.blogspot.com/2022/01/game-watch.html)
+
+[Zelda Game & Watch Dual System 薩爾達機刷雙系統完全攻略](https://maxxkao.blogspot.com/2022/02/zelda-game-watch-dual-boot-wip.html)
+
+## **Undocumented 256k BANK used by default**
+ Now NewUI used BANK as undocumented size 256k by default, It's required [patched version of openocd](https://github.com/kbeckmann/ubuntu-openocd-git-builder) to work. You can set `BIG_BANK=0` disabled it to use 128k BANK size.
+
+:exclamation: 128k internal is too small to enough Coverflow UI | i18n | multi font and program more game rom, So [patched version of openocd](https://github.com/kbeckmann/ubuntu-openocd-git-builder) is recommend.
+
+### i18n support
+`make CODEPAGE=lang` Sets codepage to configures default display language.(default=1252 as English);
+Expert `UICODEPAGE=lang` set the ui display language, default `UICODEPAGE=CODEPAGE`;
+- 1252 : English
+- 936 : 简体中文
+- 950 : 繁體中文
+- 949  : 한국어 (translation by [Augen(히힛마스터)](https://github.com/#))
+- 12521 : Español (translation by [Icebox2](https://github.com/Icebox2))
+- 12522 : Portuguese (translation by [DefKorns](https://github.com/DefKorns))
+- 12523 : Français (translation by [Narkoa](https://github.com/Narkoa))
+- 12524 : Italiano (translation by [SantX27](https://github.com/SantX27))
+- 932 : 日本語(Wait for translate support)
+
+You can set `[OPT]=[0|1]` to include or exclude some language, List of `OPT` parameter:
+`EN_US`  English; `ES_ES`  Español; `PT_PT` Portuguese; `FR_FR` Français;`IT_IT` Italiano; `ZH_CN` 简体中文;`ZH_TW` 繁體中文;`KO_KR` 한국어;`JA_JP` 日本語;
+
+other : Wait your support to translate
+
+### Coverflow support
+`make COVERFLOW=1 JPG_QUALITY=(90)`  set `COVERFLOW=1` to support show cover art. support `.png` `.bmp` `.jpg` file which filename same as rom's filename and same floder. CFW will convet it to jpg format file `.img` and pack it into firmware, you can custom jpg's quality use `JPG_QUALITY`.
+
+### Other features
+Here some other features you can edit the rom define file to custom by youself.
+Before you run `make flash`, please run `make romdef` then you can get some romdef file in `roms` folder as `gb.json` `nes.json` ..etc. Edit this files then you can custom the follow feature.
+
+Use `make ROMINFOCODE=[ascii|?]` to set charset of rominfo sourcecode to enabled local language support.
+
+- Game display title(Set `name` value, title's charset be must your custom language supported)
+- Pack or don't pack rom to firmware (Set `publish` to `1` or `0`)
+- Enable save for single game even `STATE_SAVING=0` (Set `enable_save` to `1`, if `STATE_SAVING=1` all games will be save enabled)
+- Emulator system cover image size(Set `_cover_width` and `_cover_height`, 180>=`_cover_width`>=64 and 136>=`_cover_height`>=64)
+
+`make romdef` is run patched mode for `*emu*.json` if the file already exist, each time only append new rom's information when command execute.
+
+### FONT
+`FONT=[num]` Allow you only persist one font and set the font number. 
+All the font effect you can see in: `Core\Inc\retro-go\fonts\font_un_xx.h`
+
+***********
 # Emulator collection for Nintendo® Game & Watch™
 
 This is a port of the [retro-go](https://github.com/ducalex/retro-go) emulator collection that runs on the Nintendo® Game & Watch™: Super Mario Bros. system.
@@ -26,6 +90,8 @@ Supported emulators:
   - [Build and flash using Docker](#build-and-flash-using-docker)
   - [Backing up and restoring save state files](#backing-up-and-restoring-save-state-files)
   - [Screenshots](#screenshots)
+  - [Game Genie](#game-genie)
+    - [Game Genie on PCE System](#game-genie-on-pce-system)
   - [Upgrading the flash](#upgrading-the-flash)
   - [Advanced Flash Examples](#advanced-flash-examples)
     - [Custom Firmware (CFW)](#custom-firmware-cfw)
@@ -111,6 +177,9 @@ python3 -m pip install -r requirements.txt
 #     * If you are using a modified unit with a larger external flash,
 #       set the EXTFLASH_SIZE_MB to its size in megabytes (MB) (16MB used in the example):
 #           make -j8 EXTFLASH_SIZE_MB=16 flash
+#     * If you have the Zelda version you can set GNW_TARGET=zelda to have the appropriate
+#       flash size and theme set. If you want to stick with the red theme you can set
+#       EXTFLASH_SIZE_MB=4 on your Zelda model.
 
 make -j8 flash
 ```
@@ -173,6 +242,55 @@ You can also erase all of the save slots by running `make flash_saves_erase`.
 Screenshots can be captured by pressing `PAUSE/SET` + `GAME`. This feature is disabled by default if the external flash is 1MB (stock units), because it takes up 150kB in the external flash.
 
 Screenshots can be downloaded by running `make dump_screenshot`, and will be saved as a 24-bit RGB PNG.
+
+## Game Genie
+
+Note: Currently Game Genie codes are only working with NES games.
+
+To enable, add GAME_GENIE=1 to your make command. If you have already compiled without GAME_GENIE=1, I recommend running make clean first.
+
+To add Game Genie codes, create a file ending in .ggcodes in the same directory as your rom with the same name as your rom. For instance, for 
+"roms/nes/Super Mario Bros.nes" make a file called "roms/nes/Super Mario Bros.ggcodes". In that file, each line can have up to 3 Game Genie codes and a maximum
+of 16 lines of active codes (for a max of 3 x 16 = 48 codes). Each line can also have a description (up to 25 characters long).
+You can comment out a line by prefixing with # or //. For example:
+```
+SXIOPO, Inf lives
+APZLGG+APZLTG+GAZUAG, Mega jump
+YSAOPE+YEAOZA+YEAPYA, Start on World 8-1
+YSAOPE+YEAOZA+LXAPYA, Start on World -1
+GOZSXX, Invincibility
+# TVVOAE, Circus music
+```
+When you re-flash, you can enable / disable each of your codes in the game selection screen.
+
+A collection of codes can be found here: [https://github.com/martaaay/game-and-watch-retro-go-game-genie-codes](https://github.com/martaaay/game-and-watch-retro-go-game-genie-codes).
+
+### Game Genie on PCE System
+
+Now you can define rom patch for PCE Roms. You can found patch info from [Here](https://krikzz.com/forum/index.php?topic=1004.0).
+To add PCE rom patcher, create a file ending in .pceplus in the same directory as your rom with the same name as your rom. For instance, for 
+"roms/pce/1943 Kai (J).pce" make a file called "roms/pce/1943 Kai (J).pceplus".
+A collection of codes file can be found [here](https://github.com/olderzeus/game-genie-codes-nes/tree/master/pceplus).
+
+Each line of pceplus is defined as: 
+```
+01822fbd,018330bd,0188fcbd,	Hacked Version
+[patchcommand],[...], patch desc 
+
+```
+
+Each patch command is a hex string defined as: 
+```
+01822fbd 
+_
+|how much byte to patched
+ _____
+   |patch start address, subtract pce rom header size if had.
+      __...
+       |bytes data to patched from start address
+
+```
+
 
 ## Upgrading the flash
 

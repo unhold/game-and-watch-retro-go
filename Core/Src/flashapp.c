@@ -9,13 +9,14 @@
 
 #include "githash.h"
 #include "gui.h"
+#include "bitmaps.h"
 #include "gw_buttons.h"
 #include "gw_flash.h"
 #include "gw_lcd.h"
 #include "gw_linker.h"
 #include "main.h"
 #include "rg_emulators.h"
-#include "rg_favorites.h"
+
 #include "utils.h"
 #include "sha256.h"
 
@@ -38,7 +39,7 @@ static const int font_width = 8; //odroid_overlay_get_font_width();
 #define LIST_LINE_COUNT  (LIST_HEIGHT / LIST_LINE_HEIGHT)
 
 #define PROGRESS_X_OFFSET (ODROID_SCREEN_WIDTH / 5 / 2)
-#define PROGRESS_Y_OFFSET (LIST_Y_OFFSET + 6 * LIST_LINE_HEIGHT)
+#define PROGRESS_Y_OFFSET (LIST_Y_OFFSET + 9 * LIST_LINE_HEIGHT)
 #define PROGRESS_WIDTH    (4 * (PROGRESS_X_OFFSET * 2))
 #define PROGRESS_HEIGHT   (2 * LIST_LINE_HEIGHT)
 
@@ -145,8 +146,11 @@ static void draw_progress(flashapp_t *flashapp)
 {
     char progress_str[16];
 
-    odroid_overlay_draw_fill_rect(0, LIST_Y_OFFSET, LIST_WIDTH, LIST_HEIGHT, C_BLACK);
-    draw_text_line_centered(LIST_Y_OFFSET + 2 * LIST_LINE_HEIGHT, flashapp->tab.name, C_GW_YELLOW, C_BLACK);
+    odroid_overlay_draw_fill_rect(0, LIST_Y_OFFSET, LIST_WIDTH, LIST_HEIGHT, curr_colors->bg_c);
+
+    odroid_overlay_draw_text_line(8, LIST_Y_OFFSET + LIST_LINE_HEIGHT, strlen(flashapp->tab.status) * font_width, flashapp->tab.status, curr_colors->sel_c, curr_colors->bg_c);
+
+    draw_text_line_centered(LIST_Y_OFFSET + 5 * LIST_LINE_HEIGHT, flashapp->tab.name, curr_colors->sel_c, curr_colors->bg_c);
 
     if (flashapp->progress_max != 0) {
         int32_t progress_percent = (100 * (uint64_t)flashapp->progress_value) / flashapp->progress_max;
@@ -158,15 +162,15 @@ static void draw_progress(flashapp_t *flashapp)
                                       PROGRESS_Y_OFFSET,
                                       PROGRESS_WIDTH,
                                       PROGRESS_HEIGHT,
-                                      C_GW_MAIN_COLOR);
+                                      curr_colors->main_c);
 
         odroid_overlay_draw_fill_rect(PROGRESS_X_OFFSET,
                                       PROGRESS_Y_OFFSET,
                                       progress_width,
                                       PROGRESS_HEIGHT,
-                                      C_GW_YELLOW);
+                                      curr_colors->sel_c);
 
-        draw_text_line_centered(LIST_Y_OFFSET + 4 * LIST_LINE_HEIGHT, progress_str, C_GW_YELLOW, C_BLACK);
+        draw_text_line_centered(LIST_Y_OFFSET + 8 * LIST_LINE_HEIGHT, progress_str, curr_colors->sel_c, curr_colors->bg_c);
     }
 }
 
@@ -177,8 +181,8 @@ static void redraw(flashapp_t *flashapp)
     gui_draw_status(&flashapp->tab);
 
     // Empty logo
-    odroid_overlay_draw_fill_rect(0, ODROID_SCREEN_HEIGHT - IMAGE_BANNER_HEIGHT - 15,
-                                  IMAGE_BANNER_WIDTH, IMAGE_BANNER_HEIGHT, C_GW_MAIN_COLOR);
+    //odroid_overlay_draw_fill_rect(0, ODROID_SCREEN_HEIGHT - IMAGE_BANNER_HEIGHT - 15,
+    //                              IMAGE_BANNER_WIDTH, IMAGE_BANNER_HEIGHT, curr_colors->main_c);
 
     draw_progress(flashapp);
     lcd_swap();
@@ -254,7 +258,7 @@ static void test_flash(flashapp_t *flashapp)
 
     const uint32_t rand_size = 512 * 1024;
 
-    sprintf(flashapp->tab.status, " Game and Watch Flash App TEST");
+    sprintf(flashapp->tab.status, "Game and Watch Flash App TEST");
     sprintf(flashapp->tab.name, "Erase and program..");
     lcd_swap();
     lcd_wait_for_vblank();
@@ -513,6 +517,8 @@ static void flashapp_run(flashapp_t *flashapp)
 void flashapp_main(void)
 {
     flashapp_t flashapp = {};
+    flashapp.tab.img_header = &logo_flash;
+    flashapp.tab.img_logo = &logo_gnw;
 
     SCB_InvalidateDCache();
     SCB_DisableDCache();
@@ -522,9 +528,9 @@ void flashapp_main(void)
 
     while (true) {
         if (program_chunk_count == 1) {
-            sprintf(flashapp.tab.status, " Game and Watch Flash App");
+            sprintf(flashapp.tab.status, "Game and Watch Flash App");
         } else {
-            sprintf(flashapp.tab.status, " Game and Watch Flash App (%ld/%ld)",
+            sprintf(flashapp.tab.status, "Game and Watch Flash App (%ld/%ld)",
                     program_chunk_idx, program_chunk_count);
         }
 
@@ -537,6 +543,7 @@ void flashapp_main(void)
             }
         }
 
+        lcd_sync();
         lcd_swap();
         lcd_wait_for_vblank();
         redraw(&flashapp);

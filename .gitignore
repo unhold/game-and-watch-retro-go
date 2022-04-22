@@ -33,4 +33,5 @@ venv
 
 **/*.pyc
 
-.vscode/settings.json
+.vs/*
+.vscode/*

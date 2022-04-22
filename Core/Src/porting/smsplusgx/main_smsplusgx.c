@@ -129,7 +129,7 @@ blit_gg(bitmap_t *bmp, uint16_t *framebuffer) {	/* 160 x 144 -> 320 x 240 */
 
 static void
 blit_sms(bitmap_t *bmp, uint16_t *framebuffer) {	/* 256 x 192 -> 320 x 230 */
-    const int hpad = (WIDTH - 307) / 2;
+    const int hpad = (WIDTH - 320) / 2;
     const int vpad = (HEIGHT - 230) / 2;
 
     uint32_t block[6 * 5]; /* workspace: 5 rows, 6 pixels wide */
@@ -281,8 +281,8 @@ static void sms_update_keys( odroid_gamepad_state_t* joystick )
 
   if (consoleIsGG)
   {
-      if (joystick->values[ODROID_INPUT_SELECT]) input.system |= INPUT_PAUSE;
-      if (joystick->values[ODROID_INPUT_START])  input.system |= INPUT_START;
+      if ((joystick->values[ODROID_INPUT_SELECT]) || (joystick->values[ODROID_INPUT_Y]))  input.system |= INPUT_PAUSE;
+      if ((joystick->values[ODROID_INPUT_START]) || (joystick->values[ODROID_INPUT_X]))  input.system |= INPUT_START;
   }
   else if (consoleIsCOL)
   {
@@ -303,13 +303,13 @@ static void sms_update_keys( odroid_gamepad_state_t* joystick )
       // Time + B     : 5
 
       coleco.keypad[0] = 0xf0;
-      if (joystick->values[ODROID_INPUT_SELECT]) coleco.keypad[0] = 11 - k;
+      if ((joystick->values[ODROID_INPUT_SELECT]) || (joystick->values[ODROID_INPUT_Y])) coleco.keypad[0] = 11 - k;
       else
-      if (joystick->values[ODROID_INPUT_START])  coleco.keypad[0] = (1 + k) % 7;
+      if ((joystick->values[ODROID_INPUT_START]) || (joystick->values[ODROID_INPUT_X]))  coleco.keypad[0] = (1 + k) % 7;
   }
   else { // Default like SMS
-      if (joystick->values[ODROID_INPUT_SELECT]) input.system |= INPUT_PAUSE;
-      if (joystick->values[ODROID_INPUT_START])  input.system |= INPUT_START;
+      if ((joystick->values[ODROID_INPUT_SELECT]) || (joystick->values[ODROID_INPUT_Y])) input.system |= INPUT_PAUSE;
+      if ((joystick->values[ODROID_INPUT_START]) || (joystick->values[ODROID_INPUT_X]))  input.system |= INPUT_START;
   }
 }
 

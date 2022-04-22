@@ -49,6 +49,7 @@ endif
 # Configure external flash size in MB (Megabytes)
 EXTFLASH_SIZE_MB ?= 1
 INTFLASH_BANK ?= 1
+BIG_BANK ?= 1
 
 EXTFLASH_SIZE ?= $(shell echo "$$(( $(EXTFLASH_SIZE_MB) * 1024 * 1024 ))")
 
@@ -60,12 +61,10 @@ ifeq ($(STATE_SAVING),0)
 	SAVE_PARAM := --no-save
 endif
 
-# Screenshot support allocates 150kB of external flash. Disabled by default for 1MB flash.
-ifeq ($(EXTFLASH_SIZE), 1048576)
-	ENABLE_SCREENSHOT ?= 0
-else
-	ENABLE_SCREENSHOT ?= 1
-endif
+# Screenshot support allocates 150kB of external flash. Disabled by default.
+ENABLE_SCREENSHOT ?= 0
+# Set to 1 to add game genie support
+GAME_GENIE ?= 0
 
 # Compress supported ROMs by default. Set to 0 to disable.
 COMPRESS ?= lzma
@@ -92,7 +91,84 @@ PYTHON3 ?= /usr/bin/env python3
 # Build path
 BUILD_DIR ?= build
 
+#######################################
+# i18n Codepage
+#######################################
+CODEPAGE ?= 1252
 
+ES_ES ?= 1
+PT_PT ?= 1
+FR_FR ?= 1
+IT_IT ?= 1
+ZH_CN ?= 0
+ZH_TW ?= 0
+KO_KR ?= 0
+JA_JP ?= 0
+FONT ?=0
+
+SCODEPAGE = "ascii"
+
+ifeq ($(CODEPAGE), 936)
+	SCODEPAGE = "gbk"
+	ZH_CN = 1
+else ifeq ($(CODEPAGE), 950)
+	SCODEPAGE = "big5"
+	ZH_TW = 1
+else ifeq ($(CODEPAGE), 932)
+	SCODEPAGE = "eucjp"
+	JA_JP = 1
+else ifeq ($(CODEPAGE), 949)
+	KO_KR = 1
+	SCODEPAGE = "euckr"
+else ifeq ($(CODEPAGE), 12521)
+	ES_ES = 1
+	SCODEPAGE = "iso-8859-1"
+else ifeq ($(CODEPAGE), 12522)
+	PT_PT = 1
+	SCODEPAGE = "iso-8859-1"
+else ifeq ($(CODEPAGE), 12523)
+	FR_FR = 1
+	SCODEPAGE = "iso-8859-1"
+else ifeq ($(CODEPAGE), 12524)
+	IT_IT = 1
+	SCODEPAGE = "iso-8859-1"
+else
+    SCODEPAGE = "iso-8859-1"
+endif
+
+UICODEPAGE ?= CODEPAGE
+ifeq ($(UICODEPAGE), 936)
+	ZH_CN = 1
+else ifeq ($(UICODEPAGE), 950)
+	ZH_TW = 1
+else ifeq ($(UICODEPAGE), 932)
+	JA_JP = 1
+else ifeq ($(UICODEPAGE), 949)
+	KO_KR = 1
+else ifeq ($(UICODEPAGE), 12521)
+	ES_ES = 1
+else ifeq ($(UICODEPAGE), 12522)
+	PT_PT = 1
+else ifeq ($(UICODEPAGE), 12523)
+	FR_FR = 1
+else ifeq ($(UICODEPAGE), 12524)
+	IT_IT = 1
+endif
+
+ROMINFOCODE ?= $(SCODEPAGE)
+CODEPAGE_PARAM := --codepage=$(ROMINFOCODE)
+
+#######################################
+# cover flow
+#######################################
+COVERFLOW ?= 0
+
+ifdef COVERFLOW
+	COVERFLOW_PARAM := --coverflow=$(COVERFLOW)
+endif
+
+JPG_QUALITY ?= 90
+JPG_QUALITY_PARAM := --jpg_quality=$(JPG_QUALITY)
 
 # Common C sources
 C_SOURCES +=  \
@@ -104,22 +180,8 @@ Core/Src/retro-go/rg_rtc.c \
 Core/Src/retro-go/rg_emulators.c \
 Core/Src/retro-go/rom_manager.c \
 Core/Src/porting/odroid_settings.c \
-Core/Src/retro-go/bitmaps/header_gb.c \
-Core/Src/retro-go/bitmaps/header_nes.c \
-Core/Src/retro-go/bitmaps/header_sms.c \
-Core/Src/retro-go/bitmaps/header_gg.c \
-Core/Src/retro-go/bitmaps/header_col.c \
-Core/Src/retro-go/bitmaps/header_sg1000.c \
-Core/Src/retro-go/bitmaps/header_pce.c \
-Core/Src/retro-go/bitmaps/header_gw.c \
-Core/Src/retro-go/bitmaps/logo_gb.c \
-Core/Src/retro-go/bitmaps/logo_nes.c \
-Core/Src/retro-go/bitmaps/logo_sms.c \
-Core/Src/retro-go/bitmaps/logo_gg.c \
-Core/Src/retro-go/bitmaps/logo_col.c \
-Core/Src/retro-go/bitmaps/logo_sg1000.c \
-Core/Src/retro-go/bitmaps/logo_pce.c \
-Core/Src/retro-go/bitmaps/logo_gw.c
+Core/Src/retro-go/i18n/rg_i18n.c \
+Core/Src/retro-go/rg_logos.c
 
 # Version and URL for the STM32CubeH7 SDK
 SDK_VERSION ?= v1.8.0
@@ -127,7 +189,6 @@ SDK_URL ?= https://raw.githubusercontent.com/STMicroelectronics/STM32CubeH7
 
 # Local path for the SDK
 SDK_DIR ?= Drivers
-
 
 
 # SDK C sources
@@ -139,6 +200,7 @@ Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dac_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dac.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma2d.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_exti.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash.c \
@@ -146,6 +208,7 @@ Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_hsem.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_jpeg.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_ltdc_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_ltdc.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_mdma.c \
@@ -191,6 +254,7 @@ Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dac.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_def.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma_ex.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma2d.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_exti.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash_ex.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash.h \
@@ -199,6 +263,7 @@ Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_gpio.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_hsem.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c_ex.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_jpeg.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ltdc_ex.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ltdc.h \
 Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_mdma.h \
@@ -268,6 +333,20 @@ AS_DEFS +=
 # C defines
 C_DEFS +=  \
 -DINTFLASH_BANK=$(INTFLASH_BANK) \
+-DBIG_BANK=$(BIG_BANK) \
+-DCODEPAGE=$(CODEPAGE) \
+-DUICODEPAGE=$(UICODEPAGE) \
+-DINCLUDED_ES_ES=$(ES_ES) \
+-DINCLUDED_PT_PT=$(PT_PT) \
+-DINCLUDED_FR_FR=$(FR_FR) \
+-DINCLUDED_IT_IT=$(IT_IT) \
+-DINCLUDED_ZH_CN=$(ZH_CN) \
+-DINCLUDED_ZH_TW=$(ZH_TW) \
+-DINCLUDED_KO_KR=$(KO_KR) \
+-DINCLUDED_JA_JP=$(JA_JP) \
+-DONEFONT=$(FONT) \
+-DLANG=$(LANG) \
+-DCOVERFLOW=$(COVERFLOW) \
 -DEXTFLASH_FORCE_SPI=$(EXTFLASH_FORCE_SPI) \
 -DUSE_HAL_DRIVER \
 -DSTM32H7B0xx \
@@ -278,7 +357,8 @@ C_DEFS +=  \
 -DSTATE_SAVING=$(STATE_SAVING) \
 -DENABLE_SCREENSHOT=$(ENABLE_SCREENSHOT) \
 -DGNW_TARGET_MARIO=$(GNW_TARGET_MARIO) \
--DGNW_TARGET_ZELDA=$(GNW_TARGET_ZELDA)
+-DGNW_TARGET_ZELDA=$(GNW_TARGET_ZELDA) \
+-DGAME_GENIE=$(GAME_GENIE) \
 
 # AS includes
 AS_INCLUDES +=
@@ -327,6 +407,14 @@ else ifeq ($(INTFLASH_BANK), 2)
 endif
 
 LDFLAGS += -Wl,--defsym=__INTFLASH__=$(INTFLASH_ADDRESS)
+
+ifeq ($(BIG_BANK), 1)
+	FLASH_LENGTH = 256k
+else
+	FLASH_LENGTH = 128k
+endif
+
+LDFLAGS += -Wl,--defsym=__FLASH_LENGTH__=$(FLASH_LENGTH)
 
 #######################################
 # LDFLAGS
@@ -386,7 +474,7 @@ $(BUILD_DIR)/rom_files.txt: FORCE | $(BUILD_DIR)
 
 $(BUILD_DIR)/roms.a: $(BUILD_DIR)/rom_files.txt parse_roms.py
 	$(V)$(ECHO) [ PYTHON3 ] $(notdir $<)
-	$(V)$(PYTHON3) parse_roms.py --flash-size $(EXTFLASH_SIZE) $(SAVE_PARAM) $(COMPRESS_PARAM)
+	$(V)$(PYTHON3) parse_roms.py --flash-size $(EXTFLASH_SIZE) $(SAVE_PARAM) $(COMPRESS_PARAM) $(CODEPAGE_PARAM) $(COVERFLOW_PARAM) $(JPG_QUALITY_PARAM)
 
 $(BUILD_DIR)/config.h $(BUILD_DIR)/saveflash.ld &: $(BUILD_DIR)/roms.a
 	$(V)/bin/sh -c true
@@ -640,12 +728,27 @@ help:
 	@echo "  LARGE_FLASH         - Sets the external flash size to 16MB  (deprecated)"
 	@echo "  EXTFLASH_OFFSET     - Places the data at an offset in the external flash (useful for dual boot)"
 	@echo "  INTFLASH_BANK       - Sets the internal flash bank. Valid values {1,2} (default=1)."
+	@echo "  BIG_BANK            - Use internal flash bank as undocumented 256k.(default=1, set 0 to 128k)."
+	@echo "                        It's required patched OPENOCD to work"
 	@echo "  COMPRESS            - Configures ROM compression, Valid values {0,lz4,zopfli,lzma} (default=lzma)."
 	@echo "  STATE_SAVING        - Set to 0 to disable state saving (default=1)"
 	@echo "  RESET_DBGMCU        - Configures if DBGMCU should be reset after flashing."
 	@echo "                        Set to 0 to disable power saving (default=1)"
+	@echo "  CODEPAGE            - Sets codepage to configures default display language.(default=1252)"
+	@echo "                        set 932 as Japanese; 936 as simple Chinese; 950 as traditional Chinese"
+	@echo "                        949 as Korean; 12521 as Spanish; 12522 as Portuguese; "
+	@echo "  UICODEPAGE          - Sets ui display language.(default=CODEPAGE=1252 as English)"
+	@echo "  ROMINFOCODE         - Sets encoding of parse rom name, default = ascii"
+	@echo "  ES_ES,PT_PT,FR_FR,  "
+	@echo "  IT_IT,ZH_CN,ZH_TW,  "
+	@echo "  KO_KR,JA_JP         - Set to 1 to include or exclude some other language"
+	@echo "  FONT                - Only persist one font and set the font number. "
+	@echo "                        Font effect see: Core\\Inc\\retro-go\\fonts\\font_un_xx.h"
+	@echo "  COVERFLOW           - Set to 1 include cover art with rom (default=0)"
+	@echo "  JPG_QUALITY         - Set convert cover art image jpg quality (default = 90)"
 	@echo "  ENABLE_SCREENSHOT   - Set to 1 to enable screenshot support (default disabled if extflash is 1MB)"
 	@echo "  GNW_TARGET          - Game & Watch target, Valid values {mario,zelda} (default=mario)"
+	@echo "  GAME_GENIE   - Set to 1 to enable game genie support (default=0)"
 	@echo ""
 	@echo "Current configuration:"
 	@echo "  EXTFLASH_FORCE_SPI=$(EXTFLASH_FORCE_SPI)"
@@ -654,13 +757,28 @@ help:
 	@echo "  LARGE_FLASH=$(LARGE_FLASH)"
 	@echo "  EXTFLASH_OFFSET=$(EXTFLASH_OFFSET)"
 	@echo "  INTFLASH_BANK=$(INTFLASH_BANK)"
+	@echo "  BIG_BANK=$(BIG_BANK)"
 	@echo "  COMPRESS=$(COMPRESS)"
 	@echo "  STATE_SAVING=$(STATE_SAVING)"
 	@echo "  RESET_DBGMCU=$(RESET_DBGMCU)"
 	@echo "  ENABLE_SCREENSHOT=$(ENABLE_SCREENSHOT)"
 	@echo "  GNW_TARGET=$(GNW_TARGET)"
+	@echo "  GAME_GENIE=$(GAME_GENIE)"
 	@echo "  GCC_PATH=$(GCC_PATH)"
 	@echo "  PREFIX=$(PREFIX)"
+	@echo "  CODEPAGE=$(CODEPAGE)"
+	@echo "  UICODEPAGE=$(UICODEPAGE)"
+	@echo "  COVERFLOW=$(COVERFLOW)"
+	@echo "  ROMINFOCODE=$(ROMINFOCODE)"
+	@echo "  ES_ES=$(ES_ES)"
+	@echo "  PT_PT=$(PT_PT)"
+	@echo "  FR_FR=$(FR_FR)"
+	@echo "  IT_IT=$(IT_IT)"
+	@echo "  ZH_CN=$(ZH_CN)"
+	@echo "  ZH_TW=$(ZH_TW)"
+	@echo "  KO_KR=$(KO_KR)"
+	@echo "  JA_JP=$(JA_JP)"
+	@echo "  FONT=$(FONT)"
 	@echo ""
 	@echo "Targets:"
 	@echo "  docker            - Runs a docker container using the image created by docker_build"
@@ -678,9 +796,23 @@ help:
 	@echo "  openocd           - Starts openocd with appropriate config"
 	@echo "  reset_dbgmcu      - Resets the unit and turns off DBGMCU (lowers battery drain)"
 	@echo "  reset_mcu         - Resets the unit"
+	@echo "  romdef            - Dumps all rom info to roms.json in roms directory to custom display name and"
+	@echo "                      publish property under edit that file before make flash "
 	@echo "  size              - Prints size information for all sections"
 	@echo ""
 .PHONY: help
+
+#######################################
+# Define rom's display name and publish property
+#######################################
+romdef:
+	$(V)$(ECHO) [ PYTHON3 ] $(notdir $<)
+	$(V)$(PYTHON3) parse_romdef.py
+	$(V)$(ECHO) [ RM ] $(BUILD_DIR)/roms.a
+	$(V)rm -rf $(BUILD_DIR)/roms.a
+	$(V)$(ECHO) [ RM ] $(BUILD_DIR)/core/rom_manager.*
+	$(V)rm -rf $(BUILD_DIR)/core/rom_manager.*
+.PHONY: romdef
 
 #######################################
 # download SDK files

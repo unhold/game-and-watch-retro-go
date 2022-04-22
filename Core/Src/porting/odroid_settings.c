@@ -4,12 +4,27 @@
 #include "odroid_system.h"
 #include "odroid_settings.h"
 #include "main.h"
+#include "rg_i18n.h"
 #include "appid.h"
+#include "game_genie.h"
+#include "gui.h"
 
 #define CONFIG_MAGIC 0xcafef00d
 #define ODROID_APPID_COUNT 4
 
+#if !defined  (COVERFLOW)
+  #define COVERFLOW 0
+#endif /* COVERFLOW */
 // Global
+#if !defined (GAME_GENIE)
+#define GAME_GENIE 0
+#endif
+#if !defined (CODEPAGE)
+#define CODEPAGE 1252
+#endif
+#if !defined (UICODEPAGE)
+#define UICODEPAGE 1252
+#endif
 static const char* Key_RomFilePath  = "RomFilePath";
 static const char* Key_AudioSink    = "AudioSink";
 
@@ -25,6 +40,15 @@ typedef struct app_config {
     uint8_t sprite_limit;
 } app_config_t;
 
+#if GAME_GENIE == 1
+#if MAX_GAME_GENIE_CODES != 32
+#error MAX_GAME_GENIE_CODES is assumed to be 32. Changing this value requires adjusting the type of active_game_genie_codes below
+#endif
+typedef struct rom_config {
+    uint32_t active_game_genie_codes; // A bit array for which game genie codes in retro_emulator_file_t.game_genie_codes are active for this rom
+} rom_config_t;
+#endif
+
 typedef struct persistent_config {
     uint32_t magic;
     uint8_t version;
@@ -33,6 +57,12 @@ typedef struct persistent_config {
     uint8_t start_action;
     uint8_t volume;
     uint8_t font_size;
+    uint8_t theme;
+    uint8_t colors;
+    uint8_t font;
+    uint8_t lang;
+    uint8_t romlang;
+    uint8_t splashani;
     uint8_t startup_app;
     void *startup_file;
 
@@ -42,17 +72,64 @@ typedef struct persistent_config {
 
     app_config_t app[APPID_COUNT];
 
+#if GAME_GENIE == 1
+    rom_config_t rom[ROM_COUNT]; // index is the same as 'id' in retro_emulator_file_t
+#endif
+
     uint32_t crc32;
 } persistent_config_t;
 
 static const persistent_config_t persistent_config_default = {
     .magic = CONFIG_MAGIC,
-    .version = 4,
+    .version = 5,
 
     .backlight = ODROID_BACKLIGHT_LEVEL6,
     .start_action = ODROID_START_ACTION_RESUME,
     .volume = ODROID_AUDIO_VOLUME_MAX / 2, // Too high volume can cause brown out if the battery isn't connected.
     .font_size = 8,
+    .theme = 2, //use as theme index
+    .colors = 0,
+    .font = 8,
+#if CODEPAGE==12521
+    .lang = 1,
+#elif CODEPAGE==12522
+    .lang = 2,
+#elif CODEPAGE==12523
+    .lang = 3,
+#elif CODEPAGE==12524
+    .lang = 4,
+#elif CODEPAGE==932
+    .lang = 8,
+#elif CODEPAGE==936
+    .lang = 5,
+#elif CODEPAGE==949
+    .lang = 7,
+#elif CODEPAGE==950
+    .lang = 6,
+#else
+    .lang = 0,
+#endif
+
+#if UICODEPAGE==12521
+    .romlang = 1,
+#elif UICODEPAGE==12522
+    .romlang = 2,
+#elif UICODEPAGE==12523
+    .romlang = 3,
+#elif UICODEPAGE==12524
+    .romlang = 4,
+#elif UICODEPAGE==932
+    .romlang = 8,
+#elif UICODEPAGE==936
+    .romlang = 5,
+#elif UICODEPAGE==949
+    .romlang = 7,
+#elif UICODEPAGE==950
+    .romlang = 6,
+#else
+    .romlang = 0,
+#endif
+    .splashani = 1,
     .startup_app = 0,
     .main_menu_timeout_s = 60 * 10, // Turn off after 10 minutes of idle time in the main menu
     .main_menu_selected_tab = 0,
@@ -75,6 +152,9 @@ static const persistent_config_t persistent_config_default = {
         {0}, // PCE
         {0}, // GW
     },
+#if GAME_GENIE == 1
+    .rom = {{0}},
+#endif
 };
 
 __attribute__((section (".configflash"))) __attribute__((aligned(4096))) persistent_config_t persistent_config_flash;
@@ -105,6 +185,13 @@ void odroid_settings_init()
         odroid_settings_reset();
         return;
     }
+    //set colors;
+    curr_colors = (colors_t *)(&gui_colors[persistent_config_flash.colors]);
+    //set font
+    curr_font = (char *)gui_fonts[odroid_settings_font_get()];
+    //set lang
+    curr_lang = (lang_t *)gui_lang[odroid_settings_lang_get()];
+    curr_romlang = (lang_t *)gui_lang[odroid_settings_romlang_get()];
 }
 
 void odroid_settings_commit()
@@ -118,6 +205,12 @@ void odroid_settings_commit()
 
 void odroid_settings_reset()
 {
+#if GAME_GENIE == 1 
+    for (int i = 0; i < ROM_COUNT; i++)
+    {
+        persistent_config_ram.rom[i].active_game_genie_codes = 0;
+    };
+#endif
     memcpy(&persistent_config_ram, &persistent_config_default, sizeof(persistent_config_t));
 
     // odroid_settings_commit();
@@ -141,6 +234,135 @@ void odroid_settings_int32_set(const char *key, int32_t value)
 {
 }
 
+int8_t odroid_settings_splashani_get()
+{
+    return persistent_config_ram.splashani;
+}
+
+void odroid_settings_splashani_set(int8_t splashani)
+{
+    persistent_config_ram.splashani = splashani;
+}
+
+int8_t odroid_settings_colors_get()
+{
+    int colors = persistent_config_ram.colors;
+    if (colors < 0)
+        persistent_config_ram.colors = 0;
+    else if (colors >= gui_colors_count)
+        persistent_config_ram.colors = gui_colors_count - 1;
+    return persistent_config_ram.colors;
+}
+
+void odroid_settings_colors_set(int8_t colors)
+{
+    if (colors < 0)
+        colors = 0;
+    else if (colors >= gui_colors_count)
+        colors = gui_colors_count - 1;
+    persistent_config_ram.colors = colors;
+}
+
+
+int8_t odroid_settings_font_get()
+{
+    int font = persistent_config_ram.font;
+    if (font < 0)
+        persistent_config_ram.font = 0;
+    else if (font >= gui_font_count)
+        persistent_config_ram.font = gui_font_count - 1;
+    return persistent_config_ram.font;
+}
+
+void odroid_settings_font_set(int8_t font)
+{
+    if (font < 0)
+        font = 0;
+    else if (font >= gui_font_count)
+        font = gui_font_count - 1;
+    persistent_config_ram.font = font;
+}
+
+
+int8_t odroid_settings_get_next_lang(uint8_t cur)
+{
+    lang_t* next_lang = NULL;
+    int ret = cur;
+    while (!next_lang)
+    {
+        ret ++;
+        if (ret >= gui_lang_count)
+            ret = 0;
+        next_lang = (lang_t *)gui_lang[ret];  
+    }
+    return ret;
+}
+
+int8_t odroid_settings_get_prior_lang(uint8_t cur)
+{
+    lang_t* prior_lang = NULL;
+    int ret = cur;
+    while (!prior_lang)
+    {
+        ret --;
+        if (ret < 0)
+            ret = gui_lang_count - 1;
+        prior_lang = (lang_t *)gui_lang[ret];  
+    }
+    return ret;
+}
+
+int8_t odroid_settings_lang_get()
+{
+    int lang = persistent_config_ram.lang;
+    return odroid_settings_get_prior_lang(lang + 1);
+}
+
+
+void odroid_settings_lang_set(int8_t lang)
+{
+    if (lang < 0)
+        lang = 0;
+    else if (lang >= gui_lang_count)
+        lang = gui_lang_count - 1;
+    persistent_config_ram.lang = lang;
+}
+
+
+int8_t odroid_settings_romlang_get()
+{
+    int lang = persistent_config_ram.romlang;
+    return odroid_settings_get_prior_lang(lang + 1);
+}
+
+void odroid_settings_romlang_set(int8_t lang)
+{
+    if (lang < 0)
+        lang = 0;
+    else if (lang >= gui_lang_count)
+        lang = gui_lang_count - 1;
+    persistent_config_ram.romlang = lang;
+}
+
+#if COVERFLOW != 0
+int8_t odroid_settings_theme_get()
+{
+    int theme = persistent_config_ram.theme;
+    if (theme < 0)
+        persistent_config_ram.theme = 0;
+    else if (theme > 4)
+        persistent_config_ram.theme = 4;
+    return persistent_config_ram.theme;
+}
+void odroid_settings_theme_set(int8_t theme)
+{
+    if (theme < 0)
+        theme = 0;
+    else if (theme > 4)
+        theme = 4;
+    persistent_config_ram.theme = theme;
+}
+#endif
 
 int32_t odroid_settings_app_int32_get(const char *key, int32_t default_value)
 {
@@ -193,6 +415,7 @@ void odroid_settings_AudioSink_set(int32_t value)
 {
   odroid_settings_int32_set(Key_AudioSink, value);
 }
+
 
 
 int32_t odroid_settings_Backlight_get()
@@ -331,3 +554,31 @@ void odroid_settings_DisplayOverscan_set(int32_t value)
 {
     persistent_config_ram.app[odroid_system_get_app()->id].disp_overscan = value;
 }
+
+
+#if GAME_GENIE == 1 
+bool odroid_settings_ActiveGameGenieCodes_is_enabled(uint32_t rom_id, int code_index)
+{
+    if (rom_id < 0 || rom_id >= ROM_COUNT || code_index < 0 || code_index > MAX_GAME_GENIE_CODES) {
+        return false;
+    }
+
+    uint32_t active_game_genie_codes = persistent_config_ram.rom[rom_id].active_game_genie_codes;
+    return ((active_game_genie_codes >> code_index) & 0x1) == 1;
+}
+
+bool odroid_settings_ActiveGameGenieCodes_set(uint32_t rom_id, int code_index, bool enable)
+{
+    if (rom_id < 0 || rom_id >= ROM_COUNT || code_index < 0 || code_index > MAX_GAME_GENIE_CODES) {
+        return false;
+    }
+
+    if (enable) {
+        persistent_config_ram.rom[rom_id].active_game_genie_codes |= (1<<code_index);
+    } else  {
+        persistent_config_ram.rom[rom_id].active_game_genie_codes &= ~(1<<code_index);
+    }
+
+    return true;
+}
+#endif

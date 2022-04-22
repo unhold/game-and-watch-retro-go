@@ -70,7 +70,7 @@ __RAM_UC_LENGTH__   = 300K;
 __RAM_CORE_LENGTH__ = 68K;
 __RAM_EMU_LENGTH__  = 1024K - __RAM_UC_LENGTH__ - __RAM_CORE_LENGTH__;
 __AHBRAM_LENGTH__   = 128K;
-__FLASH_LENGTH__    = 128K;
+__FLASH_LENGTH__    = DEFINED(__FLASH_LENGTH__) ? __FLASH_LENGTH__ : 128k;
 
 __EXTFLASH_TOTAL_LENGTH__ = DEFINED(__EXTFLASH_TOTAL_LENGTH__) ? __EXTFLASH_TOTAL_LENGTH__ : 1024K;
 __EXTFLASH_OFFSET__ = DEFINED(__EXTFLASH_OFFSET__) ? __EXTFLASH_OFFSET__ : 0;
@@ -208,6 +208,18 @@ SECTIONS
   ._extflash :
   {
     . = ALIGN(4);
+    __extflash_font_start__ = .;
+    *(.extflash_font)
+    . = ALIGN(4);
+    __extflash_font_end__ = .;
+    __extflash_emu_data_start__ = .;
+    *(.extflash_emu_data)
+    . = ALIGN(4);
+    __extflash_emu_data_end__ = .;
+    __extflash_logo_data_start__ = .;
+    *(.extflash_logo)
+    . = ALIGN(4);
+    __extflash_logo_data_start__ = .;
     __extflash_nes_start__ = .;
     build/core/logo*.o (.text .text* .rodata .rodata*)
     . = ALIGN(4);

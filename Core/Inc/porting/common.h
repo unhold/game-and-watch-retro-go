@@ -59,6 +59,9 @@ enum {
     INGAME_OVERLAY_SAVE,
     INGAME_OVERLAY_LOAD,
     INGAME_OVERLAY_SPEEDUP,
+    INGAME_OVERLAY_SC,
+    INGAME_OVERLAY_BUTTON_A,
+    INGAME_OVERLAY_BUTTON_B,
 };
 typedef uint8_t ingame_overlay_t;
 
@@ -77,7 +80,7 @@ typedef struct {
     uint8_t pause_frames:1;
     uint8_t pause_after_frames:3;
     uint8_t startup_frames:2;
-    uint8_t overlay:3;
+    uint8_t overlay:4;
 } common_emu_state_t;
 
 extern common_emu_state_t common_emu_state;

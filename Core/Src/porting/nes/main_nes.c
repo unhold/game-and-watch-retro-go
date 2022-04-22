@@ -14,7 +14,7 @@
 #include "gw_linker.h"
 #include "common.h"
 #include "rom_manager.h"
-
+#include "rg_i18n.h"
 #include "lz4_depack.h"
 #include <assert.h>
 #include  "miniz.h"
@@ -410,32 +410,31 @@ static bool palette_update_cb(odroid_dialog_choice_t *option, odroid_dialog_even
       odroid_settings_Palette_set(pal);
       ppu_setopt(PPU_PALETTE_RGB, pal);
    }
-
-   strcpy(option->value, ppu_getpalette(pal)->name);
-
+   sprintf(option->value, "%10s", ppu_getpalette(pal)->name);
    return event == ODROID_DIALOG_ENTER;
 }
 
 void osd_getinput(void)
 {
     uint16 pad0 = 0;
-    char pal_name[16];
+    //char pal_name[16];
 
     wdog_refresh();
 
     odroid_gamepad_state_t joystick;
     odroid_input_read_gamepad(&joystick);
-
+    char palette_values[16];
+    snprintf(palette_values, sizeof(palette_values), "%s", curr_lang->s_Default);
     odroid_dialog_choice_t options[] = {
-            {100, "Palette", pal_name, 1, &palette_update_cb},
+            {100, curr_lang->s_Palette, (char *)palette_values, 1, &palette_update_cb},
             // {101, "More...", "", 1, &advanced_settings_cb},
             ODROID_DIALOG_CHOICE_LAST
     };
     common_emu_input_loop(&joystick, options);
 
 
-    if (joystick.values[ODROID_INPUT_START])  pad0 |= INP_PAD_START;
-    if (joystick.values[ODROID_INPUT_SELECT]) pad0 |= INP_PAD_SELECT;
+    if ((joystick.values[ODROID_INPUT_START]) || (joystick.values[ODROID_INPUT_X])) pad0 |= INP_PAD_START;
+    if ((joystick.values[ODROID_INPUT_SELECT]) || (joystick.values[ODROID_INPUT_Y])) pad0 |= INP_PAD_SELECT;
     if (joystick.values[ODROID_INPUT_UP]) pad0 |= INP_PAD_UP;
     if (joystick.values[ODROID_INPUT_DOWN]) pad0 |= INP_PAD_DOWN;
     if (joystick.values[ODROID_INPUT_LEFT]) pad0 |= INP_PAD_LEFT;
@@ -565,7 +564,29 @@ int app_main_nes(uint8_t load_state, uint8_t start_paused)
         HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t *) audiobuffer_dma, (2 * AUDIO_SAMPLE_RATE) / 60);
     }
 
-    nofrendo_start(ACTIVE_FILE->name, nes_region, AUDIO_SAMPLE_RATE, false);
+    int game_genie_count = 0;
+    const char **active_game_genie_codes = NULL;
+#if GAME_GENIE == 1
+    for(int i=0; i<MAX_GAME_GENIE_CODES && i<ACTIVE_FILE->game_genie_count; i++) {
+        if (odroid_settings_ActiveGameGenieCodes_is_enabled(ACTIVE_FILE->id, i)) {
+            game_genie_count++;
+        }
+    }
+
+    active_game_genie_codes = rg_alloc(game_genie_count * sizeof(char**), MEM_ANY);
+    for(int i=0, j=0; i<MAX_GAME_GENIE_CODES && i<ACTIVE_FILE->game_genie_count; i++) {
+        if (odroid_settings_ActiveGameGenieCodes_is_enabled(ACTIVE_FILE->id, i)) {
+            active_game_genie_codes[j] = ACTIVE_FILE->game_genie_codes[i];
+            j++;
+        }
+    }
+#endif
+
+    nofrendo_start(ACTIVE_FILE->name, active_game_genie_codes, game_genie_count, nes_region, AUDIO_SAMPLE_RATE, false);
+
+#if GAME_GENIE == 1
+    rg_free(active_game_genie_codes); // No need to clean up the objects in the array as they're allocated in read only space
+#endif
 
     return 0;
 }

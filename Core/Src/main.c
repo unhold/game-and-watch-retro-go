@@ -29,6 +29,7 @@
 #include "gw_linker.h"
 #include "githash.h"
 #include "flashapp.h"
+#include "bitmaps.h"
 
 #include "odroid_colors.h"
 #include "odroid_system.h"
@@ -221,6 +222,10 @@ int _write(int file, char *ptr, int len)
 
 void store_erase(const uint8_t *flash_ptr, uint32_t size)
 {
+  // Disable clear data when save address is zero
+  if (flash_ptr == 0) {
+    return;
+  }
   // Only allow addresses in the areas meant for erasing and writing.
   assert(
     ((flash_ptr >= &__SAVEFLASH_START__)   && ((flash_ptr + size) <= &__SAVEFLASH_END__)) ||
@@ -250,7 +255,10 @@ void store_save(const uint8_t *flash_ptr, const uint8_t *data, size_t size)
 #ifdef DISABLE_STORE
   return;
 #endif
-
+  // Disable save data when save address is zero
+  if (flash_ptr == 0) {
+    return;
+  }
   // Convert mem mapped pointer to flash address
   uint32_t save_address = flash_ptr - &__EXTFLASH_BASE__;
 
@@ -449,14 +457,19 @@ int main(void)
 
   // Save the button states as early as possible
   boot_buttons = buttons_get();
-
+  // reduce the power consumption before lcd init
   // Keep this
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 5; i++) {
       wdog_refresh();
-      HAL_Delay(50);
+      HAL_Delay(10);
   }
 
   lcd_init(&hspi2, &hltdc);
+
+  for (int i = 0; i < 5; i++) {
+      wdog_refresh();
+      HAL_Delay(10);
+  }
 
   if (trigger_wdt_bsod) {
     BSOD(BSOD_WATCHDOG, 0, 0);
