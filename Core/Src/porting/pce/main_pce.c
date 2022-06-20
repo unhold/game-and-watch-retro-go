@@ -508,6 +508,7 @@ void pce_osd_gfx_blit(bool drawFrame) {
     uint32_t currentTime = HAL_GetTick();
     uint32_t delta = currentTime - lastFPSTime;
 
+#ifdef PCE_SHOW_DEBUG
     frames++;
     if (delta >= 1000) {
         framePerSecond = (10000 * frames) / delta;
@@ -515,15 +516,22 @@ void pce_osd_gfx_blit(bool drawFrame) {
         frames = 0;
         lastFPSTime = currentTime;
     }
+#endif
+
+    odroid_display_scaling_t scaling = odroid_display_get_scaling_mode();
 
     uint8_t *emuFrameBuffer = osd_gfx_framebuffer();
     pixel_t *framebuffer_active = lcd_get_active_buffer();
-    int x2=0,y=0, offsetY;
+    int x2=0,y=0, offsetY, offsetX = 0;
     int xScaleDownModulo = 0;
     int xScaleUpModulo = 0;
     uint8_t *fbTmp;
-    if (GW_LCD_WIDTH<current_width) xScaleDownModulo = current_width/(current_width-GW_LCD_WIDTH);
-    if (GW_LCD_WIDTH>current_width) xScaleUpModulo = current_width/(GW_LCD_WIDTH-current_width);
+    if (GW_LCD_WIDTH<current_width) 
+        xScaleDownModulo = current_width/(current_width-GW_LCD_WIDTH);
+    else if (GW_LCD_WIDTH>current_width && scaling != ODROID_DISPLAY_SCALING_OFF) 
+        xScaleUpModulo = current_width/(GW_LCD_WIDTH-current_width);
+    else offsetX = (GW_LCD_WIDTH - current_width)/2; //center the image horizontally
+
     int renderHeight = (current_height<=GW_LCD_HEIGHT)?current_height:GW_LCD_HEIGHT;
 
     for(y=0;y<renderHeight;y++) {
@@ -551,7 +559,7 @@ void pce_osd_gfx_blit(bool drawFrame) {
         } else {
             // No scaling, 1:1
             for(int x=0;x<current_width;x++) {
-                   framebuffer_active[offsetY+x]=mypalette[fbTmp[x]];
+                   framebuffer_active[offsetY+x+offsetX]=mypalette[fbTmp[x]];
             }
         }
     }
@@ -560,7 +568,7 @@ void pce_osd_gfx_blit(bool drawFrame) {
         fbTmp = emuFrameBuffer+(y*XBUF_WIDTH);
         offsetY = y*GW_LCD_WIDTH;
         for(int x=0;x<GW_LCD_WIDTH;x++) {
-            framebuffer_active[offsetY+x]=0;
+            framebuffer_active[offsetY+x+offsetX]=0;
         }
     }
 
