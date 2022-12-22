@@ -98,14 +98,16 @@ static const persistent_config_t persistent_config_default = {
     .lang = 3,
 #elif CODEPAGE==12524
     .lang = 4,
-#elif CODEPAGE==932
-    .lang = 8,
-#elif CODEPAGE==936
+#elif CODEPAGE==12525
     .lang = 5,
-#elif CODEPAGE==949
-    .lang = 7,
-#elif CODEPAGE==950
+#elif CODEPAGE==932
+    .lang = 9,
+#elif CODEPAGE==936
     .lang = 6,
+#elif CODEPAGE==949
+    .lang = 8,
+#elif CODEPAGE==950
+    .lang = 7,
 #else
     .lang = 0,
 #endif
@@ -118,14 +120,16 @@ static const persistent_config_t persistent_config_default = {
     .romlang = 3,
 #elif UICODEPAGE==12524
     .romlang = 4,
-#elif UICODEPAGE==932
-    .romlang = 8,
-#elif UICODEPAGE==936
+#elif UICODEPAGE==12525
     .romlang = 5,
-#elif UICODEPAGE==949
-    .romlang = 7,
-#elif UICODEPAGE==950
+#elif UICODEPAGE==932
+    .romlang = 9,
+#elif UICODEPAGE==936
     .romlang = 6,
+#elif UICODEPAGE==949
+    .romlang = 8,
+#elif UICODEPAGE==950
+    .romlang = 7,
 #else
     .romlang = 0,
 #endif
@@ -205,7 +209,7 @@ void odroid_settings_commit()
 
 void odroid_settings_reset()
 {
-#if GAME_GENIE == 1 
+#if GAME_GENIE == 1
     for (int i = 0; i < ROM_COUNT; i++)
     {
         persistent_config_ram.rom[i].active_game_genie_codes = 0;
@@ -293,7 +297,7 @@ int8_t odroid_settings_get_next_lang(uint8_t cur)
         ret ++;
         if (ret >= gui_lang_count)
             ret = 0;
-        next_lang = (lang_t *)gui_lang[ret];  
+        next_lang = (lang_t *)gui_lang[ret];
     }
     return ret;
 }
@@ -307,7 +311,7 @@ int8_t odroid_settings_get_prior_lang(uint8_t cur)
         ret --;
         if (ret < 0)
             ret = gui_lang_count - 1;
-        prior_lang = (lang_t *)gui_lang[ret];  
+        prior_lang = (lang_t *)gui_lang[ret];
     }
     return ret;
 }
@@ -556,7 +560,7 @@ void odroid_settings_DisplayOverscan_set(int32_t value)
 }
 
 
-#if GAME_GENIE == 1 
+#if GAME_GENIE == 1
 bool odroid_settings_ActiveGameGenieCodes_is_enabled(uint32_t rom_id, int code_index)
 {
     if (rom_id < 0 || rom_id >= ROM_COUNT || code_index < 0 || code_index > MAX_GAME_GENIE_CODES) {
