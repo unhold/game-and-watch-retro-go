@@ -165,7 +165,7 @@ export ADAPTER=stlink
 
 # Clone this repo with submodules:
 
-git clone --recurse-submodules https://github.com/sylverb/game-and-watch-retro-go
+git clone --recurse-submodules https://github.com/olderzeus/game-and-watch-retro-go
 
 cd game-and-watch-retro-go
 
@@ -209,7 +209,7 @@ If you need to change the project settings and generate c-code from stm32cubemx,
 
   ```bash
   # Clone this repo
-  git clone --recursive https://github.com/sylverb/game-and-watch-retro-go
+  git clone --recursive https://github.com/olderzeus/game-and-watch-retro-go
 
   # cd into it
   cd game-and-watch-retro-go
