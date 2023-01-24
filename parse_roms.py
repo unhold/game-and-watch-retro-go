@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import os
 import shutil
 import struct
 import subprocess
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import List
@@ -21,10 +23,10 @@ const uint32_t {name}_count = {rom_count};
 """
 
 # Note: this value is not easily changed as it's assumed in some memory optimizations
-MAX_GAME_GENIE_CODES = 16
+MAX_CHEAT_CODES = 16
 
 ROM_ENTRY_TEMPLATE = """\t{{
-#if GAME_GENIE == 1
+#if CHEAT_CODES == 1
 \t\t.id = {rom_id},
 #endif
 \t\t.name = "{name}",
@@ -39,10 +41,12 @@ ROM_ENTRY_TEMPLATE = """\t{{
 \t\t.save_size = {save_size},
 \t\t.system = &{system},
 \t\t.region = {region},
-#if GAME_GENIE == 1
-\t\t.game_genie_codes = {game_genie_codes},
-\t\t.game_genie_descs = {game_genie_descs},
-\t\t.game_genie_count = {game_genie_count},
+\t\t.mapper = {mapper},
+\t\t.game_config = {game_config},
+#if CHEAT_CODES == 1
+\t\t.cheat_codes = {cheat_codes},
+\t\t.cheat_descs = {cheat_descs},
+\t\t.cheat_count = {cheat_count},
 #endif
 \t}},"""
 
@@ -53,7 +57,7 @@ SYSTEM_PROTO_TEMPLATE = """
 #if !defined (BIG_BANK)
 #define BIG_BANK 1
 #endif
-#if BIG_BANK == 1
+#if (BIG_BANK == 1) && (EXTFLASH_SIZE <= 128*1024*1024)
 #define EMU_DATA 
 #else
 #define EMU_DATA __attribute__((section(".extflash_emu_data")))
@@ -81,13 +85,21 @@ SAVE_SIZES = {
     "col": 60 * 1024,
     "sg": 60 * 1024,
     "pce": 76 * 1024,
+    "msx": 272 * 1024,
     "gw": 4 * 1024,
+    "wsv": 28 * 1024,
+    "md": 144 * 1024,
+    "a7800": 36 * 1024,
+    "amstrad": 132 * 1024,
 }
 
 
 # TODO: Find a better way to find this before building
 MAX_COMPRESSED_NES_SIZE = 0x00081000
 MAX_COMPRESSED_PCE_SIZE = 0x00049000
+MAX_COMPRESSED_WSV_SIZE = 0x00080000
+MAX_COMPRESSED_SG_COL_SIZE = 60 * 1024
+MAX_COMPRESSED_A7800_SIZE = 131200
 
 """
 All ``compress_*`` functions must be decorated ``@COMPRESSIONS`` and have the
@@ -266,6 +278,76 @@ def compress_lzma(data, level=None):
 
     return compressed_data
 
+def sha1_for_file(filename):
+    sha1 = hashlib.sha1()
+    if os.path.exists(filename):
+        with open(filename, 'rb') as f:
+            while True:
+                data = f.read(16*1024)
+                if not data:
+                    break
+                sha1.update(data)
+
+        return sha1.hexdigest()
+    else:
+        return ""
+
+
+def parse_msx_bios_files():
+    #check that required MSX bios files are present
+    if (sha1_for_file("roms/msx_bios/MSX2P.rom") != "e90f80a61d94c617850c415e12ad70ac41e66bb7"):
+        print("Bad or missing roms/msx_bios/MSX2P.rom, check roms/msx_bios/README.md for info")
+        return 0
+
+    if (sha1_for_file("roms/msx_bios/MSX2PEXT.rom") != "fe0254cbfc11405b79e7c86c7769bd6322b04995"):
+        print("Bad or missing roms/msx_bios/MSX2PEXT.rom, check roms/msx_bios/README.md for info")
+        return 0
+
+    if (sha1_for_file("roms/msx_bios/MSX2PMUS.rom") != "6354ccc5c100b1c558c9395fa8c00784d2e9b0a3"):
+        print("Bad or missing roms/msx_bios/MSX2PMUS.rom, check roms/msx_bios/README.md for info")
+        return 0
+
+    if (sha1_for_file("roms/msx_bios/MSX2.rom") != "6103b39f1e38d1aa2d84b1c3219c44f1abb5436e"):
+        print("Bad or missing roms/msx_bios/MSX2.rom, check roms/msx_bios/README.md for info")
+        return 0
+
+    if (sha1_for_file("roms/msx_bios/MSX2EXT.rom") != "5c1f9c7fb655e43d38e5dd1fcc6b942b2ff68b02"):
+        print("Bad or missing roms/msx_bios/MSX2EXT.rom, check roms/msx_bios/README.md for info")
+        return 0
+
+    if (sha1_for_file("roms/msx_bios/MSX.rom") != "e998f0c441f4f1800ef44e42cd1659150206cf79"):
+        print("Bad or missing roms/msx_bios/MSX.rom, check roms/msx_bios/README.md for info")
+        return 0
+
+    # We revert previously patched PANASONICDISK if needed as we changed how it is done
+    if (sha1_for_file("roms/msx_bios/PANASONICDISK.rom") == "b9bce28fb74223ea902f82ebd107279624cf2aba"):
+        print("Reverting patch on roms/msx_bios/PANASONICDISK.rom")
+        with open("roms/msx_bios/PANASONICDISK.rom", 'rb+') as f:
+            f.seek(0x17ec)
+            f.write(b'\x02')
+
+    if (sha1_for_file("roms/msx_bios/PANASONICDISK.rom") != "7ed7c55e0359737ac5e68d38cb6903f9e5d7c2b6"):
+        print("Bad or missing roms/msx_bios/PANASONICDISK.rom, check roms/msx_bios/README.md for info")
+        return 0
+
+    # PANASONICDISK_.rom is a patched version of PANASONICDISK.rom to disable the 2nd FDD
+    # this is allowing to free some ram, which is needed for some games. It could be done by pressing
+    # ctrl key at boot using original bios, but using this patched version, the user will have nothing
+    # to do. Unfortunately this version can't be used in all cases because some games (from Micro Cabin)
+    # like Fray, XAK III, 
+    if (sha1_for_file("roms/msx_bios/PANASONICDISK_.rom") != "b9bce28fb74223ea902f82ebd107279624cf2aba"):
+        shutil.copy("roms/msx_bios/PANASONICDISK.rom","roms/msx_bios/PANASONICDISK_.rom")
+        if (sha1_for_file("roms/msx_bios/PANASONICDISK_.rom") == "7ed7c55e0359737ac5e68d38cb6903f9e5d7c2b6"):
+            print("Patching roms/msx_bios/PANASONICDISK_.rom to disable 2nd FDD controller (= more free RAM)")
+            with open("roms/msx_bios/PANASONICDISK_.rom", 'rb+') as f:
+                f.seek(0x17ec)
+                f.write(b'\x00')
+        else:
+            print("Bad or missing roms/msx_bios/PANASONICDISK.rom, check roms/msx_bios/README.md for info")
+            return 0
+
+    return 1
+
 
 def write_covart(srcfile, fn, w, h, jpg_quality):
     from PIL import Image, ImageOps
@@ -317,9 +399,9 @@ class ROM:
         self.path = filepath
         self.filename = filepath
         # Remove compression extension from the name in case it ends with that
-        if filepath.suffix in COMPRESSIONS:
+        if filepath.suffix in COMPRESSIONS or filepath.suffix == '.cdk':
             self.filename = filepath.with_suffix("").stem
-        else:
+        else :
             self.filename = filepath.stem
         romdefs.setdefault(self.filename, {})
         self.romdef = romdefs[self.filename]
@@ -328,6 +410,7 @@ class ROM:
         self.romdef.setdefault('enable_save', '0')
         self.publish = (self.romdef['publish'] == '1')
         self.enable_save = (self.romdef['enable_save'] == '1') or args.save
+        self.system_name = system_name
         self.name = self.romdef['name']
         print("Found rom " + self.filename +" will display name as: " + self.romdef['name'])
         if not (self.publish):
@@ -400,59 +483,142 @@ class ROM:
 
             codes_and_descs.append((cmd_str, desc))
 
-        if len(codes_and_descs) > MAX_GAME_GENIE_CODES:
+        if len(codes_and_descs) > MAX_CHEAT_CODES:
             print(
-                f"INFO: {self.name} has more than {MAX_GAME_GENIE_CODES} Game Genie codes. Truncating..."
+                f"INFO: {self.name} has more than {MAX_CHEAT_CODES} cheat codes. Truncating..."
             )
-            codes_and_descs = codes_and_descs[:MAX_GAME_GENIE_CODES]
+            codes_and_descs = codes_and_descs[:MAX_CHEAT_CODES]
 
         return codes_and_descs
 
-    def get_game_genie_codes(self):
+    def get_cheat_codes(self):
         # Get game genie code file path
         gg_path = Path(self.path.parent, self.filename + ".ggcodes")
 
-        if not os.path.exists(gg_path):
+        if os.path.exists(gg_path):
+            codes_and_descs = []
+            for line in gg_path.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(',', 1)
+                code = parts[0]
+                desc = None
+                if len(parts)>1:
+                    desc = parts[1]
+
+                # Remove whitespace
+                code = "".join(code.split())
+                # Remove empty lines
+                if code == "":
+                    continue
+                # Capitalize letters
+                code = code.upper()
+                # Remove invalid codes
+                if not is_valid_game_genie_code(code):
+                    continue
+
+                # Shorten description
+                if desc is not None:
+                    desc = desc[:40]
+                    desc = desc.replace('\\', r'\\\\')
+                    desc = desc.replace('"', r'\"')
+                    desc = desc.strip()
+
+                codes_and_descs.append((code, desc))
+
+            if len(codes_and_descs) > MAX_CHEAT_CODES:
+                print(
+                    f"INFO: {self.name} has more than {MAX_CHEAT_CODES} cheat codes. Truncating..."
+                )
+                codes_and_descs = codes_and_descs[:MAX_CHEAT_CODES]
+
+            return codes_and_descs
+
+        pceplus = Path(self.path.parent, self.filename + ".pceplus")
+        if os.path.exists(pceplus):
             return self.get_rom_patchs()
 
-        codes_and_descs = []
-        for line in gg_path.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split(',', 1)
-            code = parts[0]
-            desc = None
-            if len(parts)>1:
-                desc = parts[1]
+        mfc_path = Path(self.path.parent, self.filename + ".mcf")
+        if os.path.exists(mfc_path):
+            codes_and_descs = []
+            for line in mfc_path.read_text(encoding="cp1252").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                # Check if it's a comment
+                if line[0] == '!':
+                    continue
+                parts = line.split(',', 4)
+                if len(parts) == 5:
+                    length = 1
+                    if int(parts[2]) > 0xff:
+                        length = 2
+                    elif int(parts[2]) > 0xffff:
+                        length = 4
+                    code = parts[1]+','+parts[2]+','+str(length)
+                    desc = None
+                    if len(parts)>4:
+                        desc = parts[4]
 
-            # Remove whitespace
-            code = "".join(code.split())
-            # Remove empty lines
-            if code == "":
-                continue
-            # Capitalize letters
-            code = code.upper()
-            # Remove invalid codes
-            if not is_valid_game_genie_code(code):
-                continue
+                    # Remove whitespace
+                    code = "".join(code.split())
+                    # Remove empty lines
+                    if code == "":
+                        continue
+                    # Capitalize letters
+                    code = code.upper()
 
-            # Shorten description
-            if desc is not None:
-                desc = desc[:40]
-                desc = desc.replace('\\', r'\\\\')
-                desc = desc.replace('"', r'\"')
-                desc = desc.strip()
+                    # Shorten description
+                    if desc is not None:
+                        desc = desc[:40]
+                        desc = desc.replace('\\', r'\\\\')
+                        desc = desc.replace('"', r'\"')
+                        desc = desc.strip()
 
-            codes_and_descs.append((code, desc))
+                    codes_and_descs.append((code, desc))
+                elif len(parts) == 1:
+                    parts = line.split(':', 4)
+                    if int(parts[2]) == 0:
+                        length = 1
+                    elif int(parts[2]) == 1:
+                        length = 2
+                    elif int(parts[2]) == 2:
+                        length = 4
 
-        if len(codes_and_descs) > MAX_GAME_GENIE_CODES:
-            print(
-                f"INFO: {self.name} has more than {MAX_GAME_GENIE_CODES} Game Genie codes. Truncating..."
-            )
-            codes_and_descs = codes_and_descs[:MAX_GAME_GENIE_CODES]
+                    code = str(int(parts[0], base=16))+','+str(int(parts[1], base=16))+','+str(length)
+                    desc = None
+                    if len(parts)>4:
+                        desc = parts[4]
 
-        return codes_and_descs
+                    # Remove whitespace
+                    code = "".join(code.split())
+                    # Remove empty lines
+                    if code == "":
+                        continue
+                    # Capitalize letters
+                    code = code.upper()
+
+                    # Shorten description
+                    if desc is not None:
+                        desc = desc[:40]
+                        desc = desc.replace('\\', r'\\\\')
+                        desc = desc.replace('"', r'\"')
+                        desc = desc.strip()
+
+                    codes_and_descs.append((code, desc))
+
+
+            if len(codes_and_descs) > MAX_CHEAT_CODES:
+                print(
+                    f"INFO: {self.name} has more than {MAX_CHEAT_CODES} cheat codes. Truncating..."
+                )
+                codes_and_descs = codes_and_descs[:MAX_CHEAT_CODES]
+
+            return codes_and_descs
+
+        # No cheat file found
+        return []
 
     @property
     def ext(self):
@@ -463,6 +629,25 @@ class ROM:
         return self.path.stat().st_size
 
     @property
+    def mapper(self):
+        mapper = 0
+        if self.system_name == "MSX":
+            mapper = int(subprocess.check_output([sys.executable, "./tools/findblueMsxMapper.py", "roms/msx_bios/msxromdb.xml", str(self.path)]))
+        return mapper
+
+    @property
+    def game_config(self):
+        value = 0xff
+        if self.system_name == "MSX":
+            # MSX game_config structure :
+            # b7-b0 : Controls profile
+            # b8 : Does the game require to press ctrl at boot ?
+            sp_output = subprocess.check_output([sys.executable, "./tools/findblueMsxControls.py", "roms/msx_bios/msxromdb.xml", str(self.path).replace('.dsk.cdk','.dsk')]).splitlines()
+            value = int(sp_output[0]) + (int(sp_output[1]) << 8)
+            if int(sp_output[0]) == 0xff :
+                print(f"Warning : {self.name} has no controls configuration in roms/msx_bios/msxromdb.xml, default controls will be used")
+        return value
+    @property
     def img_size(self):
         try:
             return self.img_path.stat().st_size
@@ -471,6 +656,7 @@ class ROM:
 
 
 class ROMParser:
+    global sms_reserved_flash_size
     def find_roms(self, system_name: str, folder: str, extension: str, romdefs: dict) -> [ROM]:
         extension = extension.lower()
         ext = extension
@@ -484,13 +670,17 @@ class ROMParser:
         rom_files = list(roms_folder.iterdir())
         rom_files = [r for r in rom_files if r.name.lower().endswith(extension)]
         rom_files.sort()
-
         found_roms = [ROM(system_name, rom_file, ext, romdefs) for rom_file in rom_files]
+        for rom in found_roms:
+            suffix = "_no_save"
+            if rom.name.endswith(suffix) :
+                rom.name = rom.name[:-len(suffix)]
+                rom.enable_save = False
 
         return found_roms
 
     def generate_rom_entries(
-        self, name: str, roms: [ROM], save_prefix: str, system: str, game_genie_codes_prefix: str
+        self, name: str, roms: [ROM], save_prefix: str, system: str, cheat_codes_prefix: str
     ) -> str:
         body = ""
         pubcount = 0
@@ -512,9 +702,9 @@ class ROMParser:
                 ]
             )
             region = "REGION_PAL" if is_pal else "REGION_NTSC"
-            gg_count_name = "%s%s_COUNT" % (game_genie_codes_prefix, i)
-            gg_code_array_name = "%sCODE_%s" % (game_genie_codes_prefix, i)
-            gg_desc_array_name = "%sDESC_%s" % (game_genie_codes_prefix, i)
+            gg_count_name = "%s%s_COUNT" % (cheat_codes_prefix, i)
+            gg_code_array_name = "%sCODE_%s" % (cheat_codes_prefix, i)
+            gg_desc_array_name = "%sDESC_%s" % (cheat_codes_prefix, i)
             body += ROM_ENTRY_TEMPLATE.format(
                 rom_id=rom.rom_id,
                 name=str(rom.name),
@@ -527,37 +717,56 @@ class ROMParser:
                 region=region,
                 extension=rom.ext,
                 system=system,
-                game_genie_codes=gg_code_array_name if game_genie_codes_prefix else "NULL",
-                game_genie_descs=gg_desc_array_name if game_genie_codes_prefix else 0,
-                game_genie_count=gg_count_name if game_genie_codes_prefix else 0,
+                cheat_codes=gg_code_array_name if cheat_codes_prefix else "NULL",
+                cheat_descs=gg_desc_array_name if cheat_codes_prefix else 0,
+                cheat_count=gg_count_name if cheat_codes_prefix else 0,
+                mapper=rom.mapper,
+                game_config=rom.game_config,
             )
             body += "\n"
             pubcount += 1
 
         return ROM_ENTRIES_TEMPLATE.format(name=name, body=body, rom_count=pubcount)
 
-    def generate_object_file(self, rom: ROM) -> str:
+    def generate_object_file(self, rom: ROM,system_name) -> str:
         # convert rom to an .o file and place the data in the .extflash_game_rom section
         prefix = ""
         if "GCC_PATH" in os.environ:
             prefix = os.environ["GCC_PATH"]
         prefix = Path(prefix)
-
-        subprocess.check_output(
-            [
-                prefix / "arm-none-eabi-objcopy",
-                "--rename-section",
-                ".data=.extflash_game_rom,alloc,load,readonly,data,contents",
-                "-I",
-                "binary",
-                "-O",
-                "elf32-littlearm",
-                "-B",
-                "armv7e-m",
-                rom.path,
-                rom.obj_path,
-            ]
-        )
+        if system_name == "Sega Genesis":
+            subprocess.check_output(
+                [
+                    prefix / "arm-none-eabi-objcopy",
+                    "--rename-section",
+                    ".data=.extflash_game_rom,alloc,load,readonly,data,contents",
+                    "-I",
+                    "binary",
+                    "-O",
+                    "elf32-littlearm",
+                    "-B",
+                    "armv7e-m",
+                    "--reverse-bytes=2",
+                    rom.path,
+                    rom.obj_path,
+                ]
+            )
+        else:
+            subprocess.check_output(
+                [
+                    prefix / "arm-none-eabi-objcopy",
+                    "--rename-section",
+                    ".data=.extflash_game_rom,alloc,load,readonly,data,contents",
+                    "-I",
+                    "binary",
+                    "-O",
+                    "elf32-littlearm",
+                    "-B",
+                    "armv7e-m",
+                    rom.path,
+                    rom.obj_path,
+                ]
+            )
         subprocess.check_output(
             [
                 prefix / "arm-none-eabi-ar",
@@ -629,17 +838,17 @@ class ROMParser:
     def generate_save_entry(self, name: str, save_size: int) -> str:
         return f'uint8_t {name}[{save_size}]  __attribute__((section (".saveflash"))) __attribute__((aligned(4096)));\n'
 
-    def generate_game_genie_entry(self, name: str, num: int, game_genie_codes_and_descs: []) -> str:
-        str = "";
+    def generate_cheat_entry(self, name: str, num: int, cheat_codes_and_descs: []) -> str:
+        str = ""
 
-        codes = "{%s}" % ",".join(f'"{c}"' for (c,d) in game_genie_codes_and_descs)
-        descs = "{%s}" % ",".join(f'NULL' if d is None else f'"{d}"' for (c,d) in game_genie_codes_and_descs)
-        number_of_codes = len(game_genie_codes_and_descs)
+        codes = "{%s}" % ",".join(f'"{c}"' for (c,d) in cheat_codes_and_descs)
+        descs = "{%s}" % ",".join(f'NULL' if d is None else f'"{d}"' for (c,d) in cheat_codes_and_descs)
+        number_of_codes = len(cheat_codes_and_descs)
 
         count_name = "%s%s_COUNT" % (name, num)
         code_array_name = "%sCODE_%s" % (name, num)
         desc_array_name = "%sDESC_%s" % (name, num)
-        str += f'#if GAME_GENIE == 1\n'
+        str += f'#if CHEAT_CODES == 1\n'
         str += f'const char* {code_array_name}[{number_of_codes}] = {codes};\n'
         str += f'const char* {desc_array_name}[{number_of_codes}] = {descs};\n'
         str += f'const int {count_name} = {number_of_codes};\n'
@@ -683,6 +892,7 @@ class ROMParser:
 
     def _compress_rom(self, variable_name, rom, compress_gb_speed=False, compress=None):
         """This will create a compressed rom file next to the original rom."""
+        global sms_reserved_flash_size
         if not (rom.publish):
             return
         if compress is None:
@@ -713,6 +923,52 @@ class ROMParser:
                 return
             compressed_data = compress(data)
             output_file.write_bytes(compressed_data)
+        elif "wsv_system" in variable_name:  # WSV
+            if rom.path.stat().st_size > MAX_COMPRESSED_WSV_SIZE:
+                print(
+                    f"INFO: {rom.name} is too large to compress, skipping compression!"
+                )
+                return
+            compressed_data = compress(data)
+            output_file.write_bytes(compressed_data)
+        elif "a7800_system" in variable_name:  # Atari 7800
+            if rom.path.stat().st_size > MAX_COMPRESSED_A7800_SIZE:
+                print(
+                    f"INFO: {rom.name} is too large to compress, skipping compression!"
+                )
+                return
+            compressed_data = compress(data)
+            output_file.write_bytes(compressed_data)
+        elif variable_name in ["col_system","sg1000_system"] :  # COL or SG
+            if rom.path.stat().st_size > MAX_COMPRESSED_SG_COL_SIZE:
+                print(
+                    f"INFO: {rom.name} is too large to compress, skipping compression!"
+                )
+                return
+            compressed_data = compress(data)
+            output_file.write_bytes(compressed_data)
+
+        elif variable_name in ["sms_system","gg_system","md_system"]:  # GG or SMS or MD
+
+            BANK_SIZE = 128*1024
+            banks = [data[i : i + BANK_SIZE] for i in range(0, len(data), BANK_SIZE)]
+            compressed_banks = [compress(bank) for bank in banks]
+
+            # add header + number of banks + banks(offset)
+            output_data=[]
+            output_data.append( b'SMS+')
+            output_data.append(pack("<l", len(compressed_banks)))
+
+            for compressed_bank in compressed_banks:
+                output_data.append(pack("<l", len(compressed_bank)))
+
+            # Reassemble all banks back into one file
+            for compressed_bank in compressed_banks:
+                output_data.append(compressed_bank)
+
+            output_data = b"".join(output_data)
+
+            output_file.write_bytes(output_data)
         elif "gb_system" in variable_name:  # GB/GBC
             BANK_SIZE = 16384
             banks = [data[i : i + BANK_SIZE] for i in range(0, len(data), BANK_SIZE)]
@@ -764,6 +1020,19 @@ class ROMParser:
 
             output_file.write_bytes(output_data)
 
+    def _convert_dsk(self, variable_name, dsk, compress):
+        """This will convert dsk image to cdk."""
+        if not (dsk.publish):
+            return
+        if compress is None:
+            compress="none"
+
+        if "msx_system" in variable_name:  # MSX disk compression
+            subprocess.check_output("python3 tools/dsk2lzma.py \""+str(dsk.path)+"\" "+compress, shell=True)
+
+        if "amstrad_system" in variable_name:  # Amstrad disk compression
+            subprocess.check_output("python3 tools/amdsk2lzma.py \""+str(dsk.path)+"\" "+compress, shell=True)
+
     def generate_system(
         self,
         file: str,
@@ -773,7 +1042,7 @@ class ROMParser:
         extensions: List[str],
         save_prefix: str,
         romdefs: dict,
-        game_genie_codes_prefix: str,
+        cheat_codes_prefix: str,
         current_id: int,
         compress: str = None,
         compress_gb_speed: bool = False,
@@ -795,6 +1064,8 @@ class ROMParser:
         for e in extensions:
             roms_raw += self.find_roms(system_name, folder, e, romdefs)
 
+        roms_uncompressed = roms_raw
+
         def find_compressed_roms():
             if not compress:
                 return []
@@ -804,11 +1075,53 @@ class ROMParser:
                 roms += self.find_roms(system_name, folder, e + "." + compress, romdefs)
             return roms
 
+        def find_disks():
+            disks = self.find_roms(system_name, folder, "dsk", romdefs)
+            # If a disk name ends with _no_save then it means that we shouldn't
+            # allocate save space for this disk (to use with multi disks games
+            # as they only need to get a save for the first disk)
+            for disk in disks:
+                suffix = "_no_save"
+                if disk.name.endswith(suffix) :
+                    disk.name = disk.name[:-len(suffix)]
+                    disk.enable_save = False
+            return disks
+
+        def find_cdk_disks():
+            disks = self.find_roms(system_name, folder, "cdk", romdefs)
+            for disk in disks:
+                suffix = "_no_save"
+                if disk.name.endswith(suffix) :
+                    disk.name = disk.name[:-len(suffix)]
+                    disk.enable_save = False
+            return disks
+
         def contains_rom_by_name(rom, roms):
             for r in roms:
                 if r.name == rom.name:
                     return True
             return False
+
+        cdk_disks = find_cdk_disks()
+
+        disks_raw = [r for r in roms_raw if not contains_rom_by_name(r, cdk_disks)]
+        disks_raw = [r for r in disks_raw if r.ext == "dsk"]
+
+        if disks_raw:
+            pbar = tqdm(disks_raw) if tqdm else disks_raw
+            for r in pbar:
+                if tqdm:
+                    pbar.set_description(f"Converting: {system_name} / {r.name}")
+                self._convert_dsk(
+                    variable_name,
+                    r,
+                    compress)
+            # Re-generate the cdk disks list
+            cdk_disks = find_cdk_disks()
+        #remove .dsk from list
+        roms_raw = [r for r in roms_raw if not contains_rom_by_name(r, cdk_disks)]
+        #add .cdk disks to list
+        roms_raw.extend(cdk_disks)
 
         roms_compressed = find_compressed_roms()
 
@@ -838,6 +1151,7 @@ class ROMParser:
             rom.rom_id = current_id
             current_id += 1
 
+        system_save_size = 0
         total_save_size = 0
         total_rom_size = 0
         total_img_size = 0
@@ -874,14 +1188,15 @@ class ROMParser:
                 # Aligned
                 aligned_size = 4 * 1024
                 if rom.enable_save:
-                    total_save_size += (
+                    system_save_size = (
                         (save_size + aligned_size - 1) // (aligned_size)
                     ) * aligned_size
+                    total_save_size += system_save_size
                 total_rom_size += rom.size
                 if (args.coverflow != 0) :
                     total_img_size += rom.img_size
 
-                f.write(self.generate_object_file(rom))
+                f.write(self.generate_object_file((rom),system_name))
                 if (args.coverflow != 0) :
                     try:
                         f.write(self.generate_img_object_file(rom, cover_width, cover_height))
@@ -890,12 +1205,12 @@ class ROMParser:
                 if rom.enable_save:
                     f.write(self.generate_save_entry(save_prefix + str(i), save_size))
 
-                game_genie_codes_and_descs = rom.get_game_genie_codes();
-                if game_genie_codes_prefix:
-                    f.write(self.generate_game_genie_entry(game_genie_codes_prefix, i, game_genie_codes_and_descs))
+                cheat_codes_and_descs = rom.get_cheat_codes();
+                if cheat_codes_prefix:
+                    f.write(self.generate_cheat_entry(cheat_codes_prefix, i, cheat_codes_and_descs))
 
             rom_entries = self.generate_rom_entries(
-                folder + "_roms", roms, save_prefix, variable_name, game_genie_codes_prefix
+                folder + "_roms", roms, save_prefix, variable_name, cheat_codes_prefix
             )
             f.write(rom_entries)
 
@@ -911,7 +1226,11 @@ class ROMParser:
                 )
             )
 
-        return total_save_size, total_rom_size, total_img_size, current_id
+        larger_rom_size = 0
+        for r in roms_uncompressed:
+            if r.ext in ["gg","sms","md","gen","bin"]:
+                if larger_rom_size < r.size: larger_rom_size = r.size
+        return system_save_size, total_save_size, total_rom_size, total_img_size, current_id, larger_rom_size
 
     def write_if_changed(self, path: str, data: str):
         path = Path(path)
@@ -922,8 +1241,10 @@ class ROMParser:
             path.write_text(data)
 
     def parse(self, args):
+        larger_save_size = 0
         total_save_size = 0
         total_rom_size = 0
+        sega_larger_rom_size = 0
         total_img_size = 0
         build_config = ""
         current_id = 0
@@ -950,8 +1271,14 @@ class ROMParser:
         romdef.setdefault('sg', {})
         romdef.setdefault('pce', {})
         romdef.setdefault('gw', {})
+        romdef.setdefault('md', {})
+        romdef.setdefault('msx', {})
+        romdef.setdefault('msx_bios', {})
+        romdef.setdefault('wsv', {})
+        romdef.setdefault('a7800', {})
+        romdef.setdefault('amstrad', {})
 
-        save_size, rom_size, img_size, current_id = self.generate_system(
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
             "Core/Src/retro-go/gb_roms.c",
             "Nintendo Gameboy",
             "gb_system",
@@ -968,8 +1295,9 @@ class ROMParser:
         total_rom_size += rom_size
         total_img_size += img_size
         build_config += "#define ENABLE_EMULATOR_GB\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
 
-        save_size, rom_size, img_size, current_id = self.generate_system(
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
             "Core/Src/retro-go/nes_roms.c",
             "Nintendo Entertainment System",
             "nes_system",
@@ -985,8 +1313,9 @@ class ROMParser:
         total_rom_size += rom_size
         total_img_size += img_size
         build_config += "#define ENABLE_EMULATOR_NES\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
 
-        save_size, rom_size, img_size, current_id = self.generate_system(
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
             "Core/Src/retro-go/sms_roms.c",
             "Sega Master System",
             "sms_system",
@@ -997,12 +1326,15 @@ class ROMParser:
             None,
             current_id,
         )
+        if sega_larger_rom_size < larger_rom_size : sega_larger_rom_size = larger_rom_size
+
         total_save_size += save_size
         total_rom_size += rom_size
         total_img_size += img_size
         build_config += "#define ENABLE_EMULATOR_SMS\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
 
-        save_size, rom_size, img_size, current_id = self.generate_system(
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
             "Core/Src/retro-go/gg_roms.c",
             "Sega Game Gear",
             "gg_system",
@@ -1013,12 +1345,32 @@ class ROMParser:
             None,
             current_id,
         )
+        if sega_larger_rom_size < larger_rom_size : sega_larger_rom_size = larger_rom_size
         total_save_size += save_size
         total_rom_size += rom_size
         total_img_size += img_size
         build_config += "#define ENABLE_EMULATOR_GG\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
 
-        save_size, rom_size, img_size, current_id = self.generate_system(
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
+            "Core/Src/retro-go/md_roms.c",
+            "Sega Genesis",
+            "md_system",
+            "md",
+            ["md","gen","bin"],
+            "SAVE_MD_",
+            romdef["md"],
+            None,
+            current_id,
+        )
+        if sega_larger_rom_size < larger_rom_size : sega_larger_rom_size = larger_rom_size
+        total_save_size += save_size
+        total_rom_size += rom_size
+        total_img_size += img_size
+        build_config += "#define ENABLE_EMULATOR_MD\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
+
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
             "Core/Src/retro-go/col_roms.c",
             "Colecovision",
             "col_system",
@@ -1033,8 +1385,9 @@ class ROMParser:
         total_rom_size += rom_size
         total_img_size += img_size
         build_config += "#define ENABLE_EMULATOR_COL\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
 
-        save_size, rom_size, img_size, current_id = self.generate_system(
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
             "Core/Src/retro-go/sg1000_roms.c",
             "Sega SG-1000",
             "sg1000_system",
@@ -1049,8 +1402,9 @@ class ROMParser:
         total_rom_size += rom_size
         total_img_size += img_size
         build_config += "#define ENABLE_EMULATOR_SG1000\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
 
-        save_size, rom_size, img_size, current_id = self.generate_system(
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
             "Core/Src/retro-go/pce_roms.c",
             "PC Engine",
             "pce_system",
@@ -1067,8 +1421,9 @@ class ROMParser:
         total_rom_size += rom_size
         total_img_size += img_size
         build_config += "#define ENABLE_EMULATOR_PCE\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
 
-        save_size, rom_size, img_size, current_id = self.generate_system(
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
             "Core/Src/retro-go/gw_roms.c",
             "Game & Watch",
             "gw_system",
@@ -1083,8 +1438,113 @@ class ROMParser:
         total_rom_size += rom_size
         total_img_size += img_size
         build_config += "#define ENABLE_EMULATOR_GW\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
+
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
+            "Core/Src/retro-go/msx_roms.c",
+            "MSX",
+            "msx_system",
+            "msx",
+            ["rom","mx1","mx2","dsk"],
+            "SAVE_MSX_",
+            romdef["msx"],
+            "MCF_MSX_",
+            current_id,
+            args.compress
+        )
+        total_save_size += save_size
+        total_rom_size += rom_size
+        total_img_size += img_size
+        build_config += "#define ENABLE_EMULATOR_MSX\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
+
+        #MSX bios (only parse if there are some MSX games)
+        if rom_size > 0:
+            #Check that required bios files are here and patch files if needed
+            if parse_msx_bios_files():
+                system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
+                    "Core/Src/retro-go/msx_bios.c",
+                    "MSX_BIOS",
+                    "msx_bios",
+                    "msx_bios",
+                    ["rom"],
+                    "SAVE_MSXB_",
+                    romdef["msx_bios"],
+                    None,
+                    current_id
+                )
+                total_save_size += save_size
+                total_rom_size += rom_size
+                total_img_size += img_size
+            else:
+                exit(-1)
+        else:
+            system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
+                "Core/Src/retro-go/msx_bios.c",
+                "MSX_BIOS",
+                "msx_bios",
+                "msx_bios",
+                ["fakeToGenerateEmtyC"],
+                "SAVE_MSXB_",
+                romdef["msx_bios"],
+                None,
+                current_id
+            )
+
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
+            "Core/Src/retro-go/wsv_roms.c",
+            "Watara Supervision",
+            "wsv_system",
+            "wsv",
+            ["bin","sv"],
+            "SAVE_WSV_",
+            romdef["wsv"],
+            None,
+            current_id,
+            args.compress
+        )
+        total_save_size += save_size
+        total_rom_size += rom_size
+        build_config += "#define ENABLE_EMULATOR_WSV\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
+
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
+            "Core/Src/retro-go/a7800_roms.c",
+            "Atari 7800",
+            "a7800_system",
+            "a7800",
+            ["a78","bin"],
+            "SAVE_A7800_",
+            romdef["a7800"],
+            None,
+            current_id,
+            args.compress
+        )
+        total_save_size += save_size
+        total_rom_size += rom_size
+        build_config += "#define ENABLE_EMULATOR_A7800\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
+
+        system_save_size, save_size, rom_size, img_size, current_id, larger_rom_size = self.generate_system(
+            "Core/Src/retro-go/amstrad_roms.c",
+            "Amstrad CPC",
+            "amstrad_system",
+            "amstrad",
+            ["dsk"],
+            "SAVE_AMSTRAD_",
+            romdef["amstrad"],
+            None,
+            current_id,
+            args.compress
+        )
+        total_save_size += save_size
+        total_rom_size += rom_size
+        build_config += "#define ENABLE_EMULATOR_AMSTRAD\n" if rom_size > 0 else ""
+        if system_save_size > larger_save_size : larger_save_size = system_save_size
 
         total_size = total_save_size + total_rom_size + total_img_size
+        #total_size +=sega_larger_rom_size
+        sega_larger_rom_size = 0
 
         if total_size == 0:
             print(
@@ -1094,7 +1554,7 @@ class ROMParser:
 
         if args.verbose:
             print(
-                f"Save data:\t{total_save_size} bytes\nROM data:\t{total_rom_size} bytes\n"
+                f"Save data:\t{total_save_size} bytes\nROM data:\t{total_rom_size} bytes\nROMs Cache:\t{sega_larger_rom_size} bytes\n"
                 f"Cover images:\t{total_img_size} bytes\n"
                 f"Total:\t\t{total_size} / {args.flash_size} bytes (plus some metadata)."
             )
@@ -1108,11 +1568,21 @@ class ROMParser:
             exit(-1)
 
         build_config += "#define ROM_COUNT %d\n" % current_id
-        build_config += "#define MAX_GAME_GENIE_CODES %d\n" % MAX_GAME_GENIE_CODES
+        build_config += "#define MAX_CHEAT_CODES %d\n" % MAX_CHEAT_CODES
 
         self.write_if_changed(
             "build/saveflash.ld", f"__SAVEFLASH_LENGTH__ = {total_save_size};\n"
         )
+        if (args.off_saveflash == 1):
+            self.write_if_changed(
+                "build/offsaveflash.ld", f"__OFFSAVEFLASH_LENGTH__ = {larger_save_size};\n"
+            )
+        else:
+            self.write_if_changed(
+                "build/offsaveflash.ld", f"__OFFSAVEFLASH_LENGTH__ = 0;\n"
+            )
+        self.write_if_changed(
+             "build/cacheflash.ld", f"__CACHEFLASH_LENGTH__ = {sega_larger_rom_size};\n")
         self.write_if_changed("build/config.h", build_config)
 
 
@@ -1143,6 +1613,12 @@ if __name__ == "__main__":
         type=int,
         default=90,
         help="skip convert cover art image jpg quality",
+    )
+    parser.add_argument(
+        "--off_saveflash",
+        type=int,
+        default=0,
+        help="set separate flash zone for off/on savestate",
     )
     compression_choices = [t for t in COMPRESSIONS if not t[0] == "."]
     parser.add_argument(

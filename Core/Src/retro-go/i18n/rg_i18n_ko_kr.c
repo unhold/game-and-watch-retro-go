@@ -116,12 +116,12 @@ const lang_t lang_ko_kr LANG_DATA = {
     .s_Add_favorite = "즐겨찾기 추가",
     .s_Delete_save = "저장데이터 삭제",
     .s_Confiem_del_save = "저장 데이터를 삭제하시겠습니까?",
-#if GAME_GENIE == 1
-    .s_Game_Genie_Codes = "Game Genie Codes",
-    .s_Game_Genie_Codes_Title = "GG Options",
-    .s_Game_Genie_Codes_ON = "\x6",
-    .s_Game_Genie_Codes_OFF = "\x5",
-#endif        
+#if CHEAT_CODES == 1
+    .s_Cheat_Codes = "Cheat Codes",
+    .s_Cheat_Codes_Title = "Cheat Options",
+    .s_Cheat_Codes_ON = "\x6",
+    .s_Cheat_Codes_OFF = "\x5",
+#endif
 
     //=====================================================================
 

@@ -113,12 +113,12 @@ const lang_t lang_zh_tw LANG_DATA = {
     .s_Add_favorite = "★ 添加收藏",
     .s_Delete_save = "□ 刪除進度",
     .s_Confiem_del_save = "您確認要刪除目前的遊戲存檔？",
-#if GAME_GENIE == 1
-    .s_Game_Genie_Codes = "＆ 精靈代碼",
-    .s_Game_Genie_Codes_Title = "金手指",
-    .s_Game_Genie_Codes_ON = "\x6",
-    .s_Game_Genie_Codes_OFF = "\x5",
-#endif        
+#if CHEAT_CODES == 1
+    .s_Cheat_Codes = "Cheat Codes",
+    .s_Cheat_Codes_Title = "Cheat Options",
+    .s_Cheat_Codes_ON = "\x6",
+    .s_Cheat_Codes_OFF = "\x5",
+#endif
 
     //=====================================================================
     // Core\Src\retro-go\rg_main.c =========================================

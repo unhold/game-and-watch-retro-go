@@ -50,8 +50,15 @@ print_usage ram_emu_gb  __RAM_EMU_LENGTH__
 print_usage ram_emu_sms  __RAM_EMU_LENGTH__
 print_usage ram_emu_pce  __RAM_EMU_LENGTH__
 print_usage ram_emu_gw   __RAM_EMU_LENGTH__
+print_usage ram_emu_msx  __RAM_EMU_LENGTH__
+print_usage ram_emu_wsv  __RAM_EMU_LENGTH__
+print_usage ram_emu_md __RAM_EMU_LENGTH__
+print_usage ram_emu_a7800  __RAM_EMU_LENGTH__
+print_usage ram_emu_amstrad  __RAM_EMU_LENGTH__
 print_usage ahbram   __AHBRAM_LENGTH__
 print_usage flash    __FLASH_LENGTH__
+print_usage cacheflash __CACHEFLASH_LENGTH__
 print_usage extflash __EXTFLASH_LENGTH__
+print_usage offsaveflash __OFFSAVEFLASH_LENGTH__
 print_usage saveflash __SAVEFLASH_LENGTH__
 print_usage fbflash __FBFLASH_LENGTH__

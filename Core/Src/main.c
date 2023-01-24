@@ -228,6 +228,7 @@ void store_erase(const uint8_t *flash_ptr, uint32_t size)
   }
   // Only allow addresses in the areas meant for erasing and writing.
   assert(
+    ((flash_ptr >= &__OFFSAVEFLASH_START__)   && ((flash_ptr + size) <= &__OFFSAVEFLASH_END__)) ||
     ((flash_ptr >= &__SAVEFLASH_START__)   && ((flash_ptr + size) <= &__SAVEFLASH_END__)) ||
     ((flash_ptr >= &__configflash_start__) && ((flash_ptr + size) <= &__configflash_end__)) ||
     ((flash_ptr >= &__fbflash_start__) && ((flash_ptr + size) <= &__fbflash_end__))
@@ -302,9 +303,6 @@ void GW_EnterDeepSleep(void)
 
   lcd_backlight_off();
 
-  // Deinit the LCD, save power.
-  lcd_deinit(&hspi2);
-
   // Leave a trace in RAM that we entered standby mode
   boot_magic = BOOT_MAGIC_STANDBY;
 
@@ -314,6 +312,8 @@ void GW_EnterDeepSleep(void)
       wdog_refresh();
       HAL_Delay(50);
   }
+  // Deinit the LCD, save power.
+  lcd_deinit(&hspi2);
 
   HAL_PWR_EnterSTANDBYMode();
 
@@ -575,11 +575,32 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  /*
+    NORMAL : PLLM = 16 PLLN=140 PLLP=2 PLLQ=2 PLLR=2 Clock is ClockP >> 280MHz and OSPI 64MHz
+    BOOST 1: PLLM = 16 PLLN=156 PLLP=2 PLLQ=6 PLLR=2 CLOCKPLL >> 312MHz CoreClock and OSPI 104MHz
+    BOOST 2: PLLM = 38 PLLN=420 PLLP=2 PLLQ=7 PLLR=2 CLOCKPLL >> 3..MHz CoreClock and OSPI 100MHz
+    CoreClock= HSI/PLLM x PLLN/PLLP
+    OSPIClock= HSI/PLLM x PLLN/PLLQ
+  */
+#if (OVERCLOCKING_LEVEL == 0) // No overclocking
   RCC_OscInitStruct.PLL.PLLM = 16;
   RCC_OscInitStruct.PLL.PLLN = 140;
   RCC_OscInitStruct.PLL.PLLP = 2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
   RCC_OscInitStruct.PLL.PLLR = 2;
+#elif (OVERCLOCKING_LEVEL == 1) // Intermediate overclocking
+  RCC_OscInitStruct.PLL.PLLM = 16;
+  RCC_OscInitStruct.PLL.PLLN = 156;
+  RCC_OscInitStruct.PLL.PLLP = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 6;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+#else // Maximum overclocking
+  RCC_OscInitStruct.PLL.PLLM = 38;
+  RCC_OscInitStruct.PLL.PLLN = 420;
+  RCC_OscInitStruct.PLL.PLLP = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 7;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+#endif
   RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_2;
   RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
   RCC_OscInitStruct.PLL.PLLFRACN = 0;
@@ -624,7 +645,11 @@ void SystemClock_Config(void)
   PeriphClkInitStruct.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_3;
   PeriphClkInitStruct.PLL3.PLL3VCOSEL = RCC_PLL3VCOWIDE;
   PeriphClkInitStruct.PLL3.PLL3FRACN = 0;
+#if (OVERCLOCKING_LEVEL == 0)
   PeriphClkInitStruct.OspiClockSelection = RCC_OSPICLKSOURCE_CLKP;
+#else
+  PeriphClkInitStruct.OspiClockSelection = RCC_OSPICLKSOURCE_PLL;
+#endif
   PeriphClkInitStruct.CkperClockSelection = RCC_CLKPSOURCE_HSI;
   PeriphClkInitStruct.Sai1ClockSelection = RCC_SAI1CLKSOURCE_PLL2;
   PeriphClkInitStruct.Spi123ClockSelection = RCC_SPI123CLKSOURCE_CLKP;
@@ -1198,12 +1223,12 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  /* PB12 LCD Reset line pull-up VAux1V8 */
+  /* PB12 LCD Chip Select line pull-up VAux1V8 */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  /* PD8 LCD_CSn Chip Select line low speed due to capacitor 100nf to GND (inverted) */
-  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_SET);
+  /* PD8 LCD Reset line low speed with capacitor 100nf to GND */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
    /* PD1 1.8V-> 1.8Vaux Disable power for LCD & External FLASH */

@@ -115,12 +115,12 @@ const lang_t lang_fr_fr LANG_DATA = {
     .s_Add_favorite = "Ajouter aux favoris",
     .s_Delete_save = "Supprimer la sauvegarde",
     .s_Confiem_del_save = "Supprimer la sauvegarde ?",
-#if GAME_GENIE == 1
-    .s_Game_Genie_Codes = "Game Genie Codes",
-    .s_Game_Genie_Codes_Title = "GG Options",
-    .s_Game_Genie_Codes_ON = "\x6",
-    .s_Game_Genie_Codes_OFF = "\x5",
-#endif        
+#if CHEAT_CODES == 1
+    .s_Cheat_Codes = "Codes de triche",
+    .s_Cheat_Codes_Title = "Options de triche",
+    .s_Cheat_Codes_ON = "\x6",
+    .s_Cheat_Codes_OFF = "\x5",
+#endif
 
     //=====================================================================
 

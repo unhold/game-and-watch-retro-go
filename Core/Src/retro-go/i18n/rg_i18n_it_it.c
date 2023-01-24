@@ -116,12 +116,12 @@ const lang_t lang_it_it LANG_DATA = {
     .s_Add_favorite = "Aggiungi ai preferiti",
     .s_Delete_save = "Elimina il salvataggio",
     .s_Confiem_del_save = "Eliminare il salvataggio?",
-#if GAME_GENIE == 1
-    .s_Game_Genie_Codes = "Codici Game Genie",
-    .s_Game_Genie_Codes_Title = "Codici Genie Codes",
-    .s_Game_Genie_Codes_ON = "\x6",
-    .s_Game_Genie_Codes_OFF = "\x5",
-#endif        
+#if CHEAT_CODES == 1
+    .s_Cheat_Codes = "Codici Cheat",
+    .s_Cheat_Codes_Title = "Codici Cheat",
+    .s_Cheat_Codes_ON = "\x6",
+    .s_Cheat_Codes_OFF = "\x5",
+#endif
 
     //=====================================================================
 

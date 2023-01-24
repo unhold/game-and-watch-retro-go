@@ -107,12 +107,12 @@ const lang_t lang_pt_pt LANG_DATA = {
     .s_Add_favorite = "Adicionar favorito",
     .s_Delete_save = "Apagar save",
     .s_Confiem_del_save = "Apagar ficheiro save?",
-#if GAME_GENIE == 1
-    .s_Game_Genie_Codes = "Game Genie Codes",
-    .s_Game_Genie_Codes_Title = "GG Options",
-    .s_Game_Genie_Codes_ON = "\x6",
-    .s_Game_Genie_Codes_OFF = "\x5",
-#endif        
+#if CHEAT_CODES == 1
+    .s_Cheat_Codes = "Cheat Codes",
+    .s_Cheat_Codes_Title = "Cheat Options",
+    .s_Cheat_Codes_ON = "\x6",
+    .s_Cheat_Codes_OFF = "\x5",
+#endif
 
     //=====================================================================
     // Core\Src\retro-go\rg_main.c =========================================

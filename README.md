@@ -69,14 +69,19 @@ This is a port of the [retro-go](https://github.com/ducalex/retro-go) emulator c
 
 Supported emulators:
 
+- Amstrad CPC6128 *beta* (amstrad) (check [Amstrad CPC6128 Emulator](#amstrad-cpc6128-emulator) section for details about the Amstrad CPC6128 emulator)
+- Atari 7800 (a7800)
 - ColecoVision (col)
 - Gameboy / Gameboy Color (gb/gbc)
 - Game & Watch / LCD Games (gw)
+- MSX1/2/2+ (msx) (check [MSX Emulator](#msx-emulator) section for details about MSX emulator)
 - Nintendo Entertainment System (nes)
 - PC Engine / TurboGrafx-16 (pce)
 - Sega Game Gear (gg)
+- Sega Genesis / Megadrive (md)
 - Sega Master System (sms)
 - Sega SG-1000 (sg)
+- Watara Supervision (wsv)
 
 ## Table of Contents
 - [Emulator collection for Nintendo® Game & Watch™](#emulator-collection-for-nintendo-game--watch)
@@ -91,8 +96,10 @@ Supported emulators:
   - [Build and flash using Docker](#build-and-flash-using-docker)
   - [Backing up and restoring save state files](#backing-up-and-restoring-save-state-files)
   - [Screenshots](#screenshots)
-  - [Game Genie](#game-genie)
-    - [Game Genie on PCE System](#game-genie-on-pce-system)
+  - [Cheat codes](#cheat-codes)
+    - [Cheat codes on NES System](#cheat-codes-on-nes-system)
+    - [Cheat codes on PCE System](#cheat-codes-on-pce-system)
+    - [Cheat codes on MSX System](#cheat-codes-on-msx-system)
   - [Upgrading the flash](#upgrading-the-flash)
   - [Advanced Flash Examples](#advanced-flash-examples)
     - [Custom Firmware (CFW)](#custom-firmware-cfw)
@@ -158,7 +165,7 @@ export ADAPTER=stlink
 
 # Clone this repo with submodules:
 
-git clone --recurse-submodules https://github.com/kbeckmann/game-and-watch-retro-go
+git clone --recurse-submodules https://github.com/sylverb/game-and-watch-retro-go
 
 cd game-and-watch-retro-go
 
@@ -202,7 +209,7 @@ If you need to change the project settings and generate c-code from stm32cubemx,
 
   ```bash
   # Clone this repo
-  git clone --recursive https://github.com/kbeckmann/game-and-watch-retro-go
+  git clone --recursive https://github.com/sylverb/game-and-watch-retro-go
 
   # cd into it
   cd game-and-watch-retro-go
@@ -248,11 +255,15 @@ Screenshots can be captured by pressing `PAUSE/SET` + `GAME`. This feature is di
 
 Screenshots can be downloaded by running `make dump_screenshot`, and will be saved as a 24-bit RGB PNG.
 
-## Game Genie
+## Cheat codes
 
-Note: Currently Game Genie codes are only working with NES games.
+Note: Currently cheat codes are only working with NES, PCE and MSX games.
 
-To enable, add GAME_GENIE=1 to your make command. If you have already compiled without GAME_GENIE=1, I recommend running make clean first.
+To enable, add CHEAT_CODES=1 to your make command. If you have already compiled without CHEAT_CODES=1, I recommend running make clean first.
+To enable or disable cheats, select a game then select "Cheat Codes". You will be able to select cheats you want to enable/disable. Then you can start/resume a game and selected cheats will be applied.
+On MSX system, you can enable/disable cheats during game.
+
+### Cheat codes on NES System
 
 To add Game Genie codes, create a file ending in .ggcodes in the same directory as your rom with the same name as your rom. For instance, for
 "roms/nes/Super Mario Bros.nes" make a file called "roms/nes/Super Mario Bros.ggcodes". In that file, each line can have up to 3 Game Genie codes and a maximum
@@ -270,7 +281,7 @@ When you re-flash, you can enable / disable each of your codes in the game selec
 
 A collection of codes can be found here: [https://github.com/martaaay/game-and-watch-retro-go-game-genie-codes](https://github.com/martaaay/game-and-watch-retro-go-game-genie-codes).
 
-### Game Genie on PCE System
+### Cheat codes on PCE System
 
 Now you can define rom patch for PCE Roms. You can found patch info from [Here](https://krikzz.com/forum/index.php?topic=1004.0).
 To add PCE rom patcher, create a file ending in .pceplus in the same directory as your rom with the same name as your rom. For instance, for
@@ -295,7 +306,11 @@ _
        |bytes data to patched from start address
 
 ```
+### Cheat codes on MSX System
 
+You can use blueMSX MCF cheat files with your Game & Watch. A nice collection of patch files is available [Here](http://bluemsx.msxblue.com/rel_download/Cheats.zip).
+Just copy the wanted MCF files in your roms/msx folder with the same name as the corresponding rom/dsk file.
+On MSX system, you can enable/disable cheats while playing. Just press the Pause/Set button and choose "Cheat Codes" menu to choose which cheats you want to enable or disable.
 
 ## Upgrading the flash
 
@@ -325,7 +340,37 @@ To flash the custom firmware, [follow the CFW README](https://github.com/BrianPu
 make PATCH_PARAMS="--internal-only" flash_patched_int
 ```
 
-## Discord, support and discussion
+## MSX Emulator
+
+MSX system is a computer with a keyboard and with multiple extensions possible (like sound cartridges).
+The system needs bios files to be in the roms/msx_bios folder. Check roms/msx_bios/README.md file for details.
+
+What is supported :
+- MSX1/2/2+ system are supported. MSX Turbo-R will probably not work on the G&W.
+- ROM cartridges images : roms have to be named with rom, mx1 or mx2 extension.
+- Disks images : disks images have to be named with dsk extension. Due to memory constraints, disks images are read only. Multiple disks games are supported and user can change the current disk using the "Pause/Options/Change Dsk" menu. Note : Savestates on the MSX are taking a lot of space (260kBytes) due to all the system memory to save, and one savestate slot is allocated for each dsk file. In the case of multiple disks games, only the first disk needs to have a savestate allocation, for this reason it is possible to disable savestate allocation for disk2/3/... of a multiple disk game by adding the _no_save suffix to disk name. Example : "SD Snatcher Disk 1.dsk" will have the savestate memory allocated, and "SD Snatcher Disk 2_no_save.dsk" will not have save state memory allocated. To prevent wasting flash memory for savestates that will never be used, it's a good practice to keep original name for first disk of a game (the one you are selecting to start the game) and to add _no_save suffix to other disks of the game.
+- Cheat codes support (MCF files in old or new format as described [Here](http://www.msxblue.com/manual/trainermcf_c.htm))
+- The file roms/msx_bios/msxromdb.xml contains control profiles for some games, it allows to configure controls in the best way for some games. If a game has no control profile defined in msxromdb.xml, then controls will be configured as joystick emulation mode.
+- Sometimes games require the user to enter his name using the keyboard, and some games like Metal Gear 1/2 are using F1-F5 keys to acces items/radio/... menus. It is possible to virtually press these keys using the "Pause/Options/Press Key" menu.
+
+Note that the MSX support is done using blueMsx 2.8.2, any game that is not working correctly using this emulator will not work on the Game & Watch. To fit in the G&W, a some features have been removed, so it's possible that some games running on blueMSX will not work in the G&W port. The emulator port is still in progress, consider it as a preview version.
+
+## Amstrad CPC6128 Emulator
+
+Amstrad CPC6128 system is a computer with a keyboard and disk drive.
+
+What is supported :
+- Amstrad CPC6128 system is the only supported system. CPC464 could be added if there is any interest in doing this. Note that CPC464+/6128+ systems are not supported (running a around 40% of their normal speed so it has been removed)
+- Disks images : disks images have to be named with dsk extension. Due to memory constraints, disks images are read only. Multiple disks games are supported and user can change the current disk using the "Pause/Options/Change Dsk" menu. In the case of multiple disks games, only the first disk needs to have a savestate allocation, for this reason it is possible to disable savestate allocation for disk2/3/... of a multiple disk game by adding the _no_save suffix to disk name. To prevent wasting flash memory for savestates that will never be used, it's a good practice to keep original name for first disk of a game (the one you are selecting to start the game) and to add _no_save suffix to other disks of the game. Both standard and extended dsk format are supported, moreover a compression mecanism specific to the G&W has been implemented to reduce the size of disk images. Disk compression is automatically handled during the build process.
+- Normally when the amstrad system starts, it will wait the user to enter a run"file or |CPM command to load the content of the disk. As it's not very friendly, the emulator is detecting the name of the file to run and enter automatically the right commant at startup
+- Sometimes games require the user to enter his name using the keyboard. It is possible to virtually press these keys using the "Pause/Options/Press Key" menu.
+- Amstrad screen resolution is 384x272 pixels while G&W resolution is 320x240. The standard screen mode (with no scaling) will show the screen without the borders which will be ok in most cases, but in some cases games are using borders to show some content. If you want to see the whole Amstrad screen on the G&W, set options/scaling to "fit".
+
+Tape support has not been ported, if there is any interest in adding this, it could be considered.
+
+Note that the Amstrad CPC6128 support is done using caprice32 emulator, any game that is not working correctly using this emulator will not work on the Game & Watch. To fit in the G&W, a some features have been removed, so it's possible that some games running on caprice32 will not work in the G&W port. The emulator port is still in progress, consider it as a preview version.
+
+## Discord, support and discussion 
 
 Please join the [Discord](https://discord.gg/vVcwrrHTNJ).
 
