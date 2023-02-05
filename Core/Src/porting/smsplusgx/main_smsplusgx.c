@@ -1,9 +1,13 @@
+#include "build/config.h"
+
+#if defined(ENABLE_EMULATOR_SMS) || defined(ENABLE_EMULATOR_GG) || defined(ENABLE_EMULATOR_COL) || defined(ENABLE_EMULATOR_SG1000)
 #include <odroid_system.h>
 #include <string.h>
 
 #include "main.h"
 #include "bilinear.h"
 #include "gw_lcd.h"
+#include "gw_flash.h"
 #include "gw_linker.h"
 #include "gw_buttons.h"
 #include "shared.h"
@@ -11,6 +15,9 @@
 #include "common.h"
 #include "main_smsplusgx.h"
 #include "appid.h"
+#include "rg_i18n.h"
+#include "lzma.h"
+#include "gw_malloc.h"
 
 #define SMS_WIDTH 256
 #define SMS_HEIGHT 192
@@ -43,30 +50,144 @@ void set_config();
 unsigned int crc32_le(unsigned int crc, unsigned char const * buf,unsigned int len);
 
 // --- MAIN
+#define SMSROM_RAM_BUFFER_LENGTH (60*1024)
+static uint8_t *ROMinRAM_DATA;
+
+static const uint8_t IMG_DISKETTE[] = {
+    0x00, 0x00, 0x00, 0x3F, 0xFF, 0xE0, 0x7C, 0x00,
+    0x70, 0x7C, 0x03, 0x78, 0x7C, 0x03, 0x7C, 0x7C,
+    0x03, 0x7E, 0x7C, 0x00, 0x7E, 0x7F, 0xFF, 0xFE,
+    0x7F, 0xFF, 0xFE, 0x7F, 0xFF, 0xFE, 0x7F, 0xFF,
+    0xFE, 0x7F, 0xFF, 0xFE, 0x7F, 0xFF, 0xFE, 0x7E,
+    0x00, 0x7E, 0x7C, 0x00, 0x3E, 0x7C, 0x00, 0x3E,
+    0x7D, 0xFF, 0xBE, 0x7C, 0x00, 0x3E, 0x7C, 0x00,
+    0x3E, 0x7D, 0xFF, 0xBE, 0x7C, 0x00, 0x3E, 0x7C,
+    0x00, 0x3E, 0x3F, 0xFF, 0xFC, 0x00, 0x00, 0x00,
+};
+
 
 static int
 load_rom_from_flash(uint8_t emu_engine)
 {
     static uint8 sram[0x8000];
-    cart.rom = (uint8 *)ROM_DATA;
-    cart.size = ROM_DATA_LENGTH;
+    /* check if it's compressed */
+
+    if (strcmp(ROM_EXT, "lzma") == 0)
+    {
+        /* it can fit in ITC RAM */
+        if ((emu_engine == SMSPLUSGX_ENGINE_COLECO) || (emu_engine == SMSPLUSGX_ENGINE_SG1000))
+        {
+            size_t n_decomp_bytes;
+            ROMinRAM_DATA = itc_malloc(SMSROM_RAM_BUFFER_LENGTH);
+            n_decomp_bytes = lzma_inflate((uint8 *)ROMinRAM_DATA, SMSROM_RAM_BUFFER_LENGTH, (uint8 *)ROM_DATA, ROM_DATA_LENGTH);
+            cart.rom = (uint8 *)ROMinRAM_DATA;
+            cart.size = (uint32_t)n_decomp_bytes;
+        }
+
+        /* it can't fit in ITC RAM */
+        else
+        {
+
+
+        //   assert ( (&__CACHEFLASH_END__ - &__CACHEFLASH_START__) > 0);
+
+            /* check header  */
+            //assert(memcmp((uint8 *)ROM_DATA, "SMS+", 4) == 0);
+
+            unsigned int nb_banks = 0;
+            unsigned int lzma_bank_size = 0;
+            unsigned int lzma_bank_offset = 0;
+            unsigned int uncompressed_rom_size = 0;
+
+            memcpy(&nb_banks, &ROM_DATA[4], sizeof(nb_banks));
+
+            lzma_bank_offset = 4 + 4 + 4 * nb_banks;
+
+            for (int i = 0; i < nb_banks; i++)
+            {
+                wdog_refresh();
+                memcpy(&lzma_bank_size, &ROM_DATA[8 + 4 * i], sizeof(lzma_bank_size));
+                memset((uint8 *)lcd_get_inactive_buffer(),0x0,320*240*2);
+
+                uint16_t *dest = lcd_get_inactive_buffer();
+
+
+                /* uncompressed in lcd framebuffer */
+                size_t n_decomp_bytes;
+                n_decomp_bytes = lzma_inflate((uint8 *)lcd_get_active_buffer(), 2 * 320 * 240, &ROM_DATA[lzma_bank_offset], lzma_bank_size);
+
+                //assert (  (&__CACHEFLASH_END__ - &__CACHEFLASH_START__) >= ( (uint32_t)n_decomp_bytes + uncompressed_rom_size) );
+
+                int diff = memcmp((void *)(&__CACHEFLASH_START__ + uncompressed_rom_size), (uint8 *)lcd_get_active_buffer(), n_decomp_bytes);
+                if (diff != 0)
+                {
+                wdog_refresh(); 
+                OSPI_DisableMemoryMappedMode();
+
+                    /* display diskette during flash erase */
+                    uint16_t idx = 0;
+                    for(uint8_t i=0; i < 24; i++) {
+                        for(uint8_t j=0; j < 24; j++) {
+                            if(IMG_DISKETTE[idx / 8] & (1 << (7 - idx % 8))){
+                                dest[286 + j +  GW_LCD_WIDTH * (10 + i)] = 0xFFFF;
+                            }
+                            idx++;
+                        }
+                    }
+
+                    /* erase the trunk */
+                    OSPI_EraseSync((&__CACHEFLASH_START__ - &__EXTFLASH_BASE__)+uncompressed_rom_size, (uint32_t)n_decomp_bytes);
+
+                    /* erase diskette during flash program */
+                    for (short y = 0; y < 24; y++) {
+                    uint16_t *dest_row = &dest[(y + 10) * GW_LCD_WIDTH + 286];
+                    memset(dest_row,0x0 , 24 * sizeof(uint16_t));
+                    }
+
+                    /* program the trunk */
+                    wdog_refresh();
+                    OSPI_Program((&__CACHEFLASH_START__ - &__EXTFLASH_BASE__)+uncompressed_rom_size, (uint8 *)lcd_get_active_buffer(), (uint32_t)n_decomp_bytes);
+
+                    OSPI_EnableMemoryMappedMode();
+                    wdog_refresh();
+                }
+
+                lzma_bank_offset += lzma_bank_size;
+                uncompressed_rom_size += (uint32_t)n_decomp_bytes;
+
+            }
+
+            /* set the rom pointer and size */
+            cart.rom = &__CACHEFLASH_START__; 
+            cart.size = uncompressed_rom_size; 
+        }
+    }
+    else
+    {
+        cart.rom = (uint8 *)ROM_DATA;
+        cart.size = ROM_DATA_LENGTH;
+    }
+
     cart.sram = sram;
     cart.pages = cart.size / 0x4000;
     cart.crc = crc32_le(0, cart.rom, cart.size);
     cart.loaded = 1;
 
-    if (emu_engine == SMSPLUSGX_ENGINE_COLECO) {
-      option.console = 6; // Force Coleco
-    } else
-    if (emu_engine == SMSPLUSGX_ENGINE_SG1000) {
-      option.console = 5; // Force SG1000
+    if (emu_engine == SMSPLUSGX_ENGINE_COLECO)
+    {
+        option.console = 6; // Force Coleco
+    }
+    else if (emu_engine == SMSPLUSGX_ENGINE_SG1000)
+    {
+        option.console = 5; // Force SG1000
     }
     set_config();
     printf("%s: OK. cart.size=%d, cart.crc=%#010lx\n", __func__, (int)cart.size, cart.crc);
 
-    if (sms.console == CONSOLE_COLECO) {
-      extern const unsigned char ColecoVision_BIOS[];
-      coleco.rom = (uint8*)ColecoVision_BIOS;
+    if (sms.console == CONSOLE_COLECO)
+    {
+        extern const unsigned char ColecoVision_BIOS[];
+        coleco.rom = (uint8*)ColecoVision_BIOS;
     }
     return 1;
 }
@@ -83,7 +204,16 @@ static bool SaveState(char *pathName)
     uint8_t *state_save_buffer = (uint8_t *)glob_bp_lut;
     memset(state_save_buffer, 0x00, 60 * 1024);
     system_save_state(state_save_buffer);
-    store_save(ACTIVE_FILE->save_address, state_save_buffer, 60 * 1024);
+#if OFF_SAVESTATE==1
+    if (strcmp(pathName,"1") == 0) {
+        // Save in common save slot (during a power off)
+        store_save((const uint8_t *)&__OFFSAVEFLASH_START__, state_save_buffer, 60 * 1024);
+    } else {
+#endif
+        store_save(ACTIVE_FILE->save_address, state_save_buffer, 60 * 1024);
+#if OFF_SAVESTATE==1
+    }
+#endif
     /* restore the contents of _bp_lut */
     render_init();
     return false;
@@ -95,7 +225,7 @@ static bool LoadState(char *pathName)
     return true;
 }
 
-uint8_t *fb_buffer = emulator_framebuffer;
+static uint8_t fb_buffer[COL_WIDTH*COL_HEIGHT];
 
 #define CONV(_b0) ((0b11111000000000000000000000&_b0)>>10) | ((0b000001111110000000000&_b0)>>5) | ((0b0000000000011111&_b0));
 
@@ -315,7 +445,7 @@ static void sms_update_keys( odroid_gamepad_state_t* joystick )
 
 
 int
-app_main_smsplusgx(uint8_t load_state, uint8_t start_paused, uint8_t is_coleco)
+app_main_smsplusgx(uint8_t load_state, uint8_t start_paused, uint8_t save_slot, uint8_t is_coleco)
 {
     if (start_paused) {
         common_emu_state.pause_after_frames = 2;
@@ -372,7 +502,18 @@ app_main_smsplusgx(uint8_t load_state, uint8_t start_paused, uint8_t is_coleco)
     memset(framebuffer1, 0, sizeof(framebuffer1));
     memset(framebuffer2, 0, sizeof(framebuffer2));
 
-    if (load_state) LoadState(NULL);
+    if (load_state) {
+#if OFF_SAVESTATE==1
+        if (save_slot == 1) {
+            // Load from common save slot if needed
+            system_load_state((void *)&__OFFSAVEFLASH_START__);
+        } else {
+#endif
+            LoadState(NULL);
+#if OFF_SAVESTATE==1
+        }
+#endif
+    }
 
     while (true)
     {
@@ -386,6 +527,14 @@ app_main_smsplusgx(uint8_t load_state, uint8_t start_paused, uint8_t is_coleco)
         common_emu_input_loop(&joystick, options);
 
         bool drawFrame = common_emu_frame_loop();
+        uint8_t turbo_buttons = odroid_settings_turbo_buttons_get();
+        bool turbo_a = (joystick.values[ODROID_INPUT_A] && (turbo_buttons & 1));
+        bool turbo_b = (joystick.values[ODROID_INPUT_B] && (turbo_buttons & 2));
+        bool turbo_button = odroid_button_turbos();
+        if (turbo_a)
+            joystick.values[ODROID_INPUT_A] = turbo_button;
+        if (turbo_b)
+            joystick.values[ODROID_INPUT_B] = !turbo_button;
 
         sms_update_keys( &joystick );
 
@@ -408,3 +557,5 @@ app_main_smsplusgx(uint8_t load_state, uint8_t start_paused, uint8_t is_coleco)
         }
     }
 }
+
+#endif

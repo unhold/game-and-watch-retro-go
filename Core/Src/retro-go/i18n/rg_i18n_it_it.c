@@ -43,6 +43,54 @@ const lang_t lang_it_it LANG_DATA = {
     .s_Default = "Predefinita",
     //=====================================================================
 
+    // Core\Src\porting\md\main_gwenesis.c ================================
+    .s_md_keydefine = "keys: A-B-C",
+    .s_md_Synchro = "Synchro",
+    .s_md_Synchro_Audio = "AUDIO",
+    .s_md_Synchro_Vsync = "VSYNC",
+    .s_md_Dithering = "Dithering",
+    .s_md_Debug_bar = "Debug bar",
+    .s_md_Option_ON = "\x6",
+    .s_md_Option_OFF = "\x5",
+    .s_md_AudioFilter = "Audio Filter",
+    .s_md_VideoUpscaler = "Video Upscaler",
+    //=====================================================================
+
+    // Core\Src\porting\md\main_wsv.c ================================
+    .s_wsv_palette_Default = "Default",
+    .s_wsv_palette_Amber = "Amber",
+    .s_wsv_palette_Green = "Green",
+    .s_wsv_palette_Blue = "Blue",
+    .s_wsv_palette_BGB = "BGB",
+    .s_wsv_palette_Wataroo = "Wataroo",
+    //=====================================================================
+
+    // Core\Src\porting\md\main_msx.c ================================
+    .s_msx_Change_Dsk = "Change Dsk",
+    .s_msx_Select_MSX = "Select MSX",
+    .s_msx_MSX1_EUR = "MSX1 (EUR)",
+    .s_msx_MSX2_EUR = "MSX2 (EUR)",
+    .s_msx_MSX2_JP = "MSX2+ (JP)",
+    .s_msx_Frequency = "Frequency",
+    .s_msx_Freq_Auto = "Auto",
+    .s_msx_Freq_50 = "50Hz",
+    .s_msx_Freq_60 = "60Hz",
+    .s_msx_A_Button = "A Button",
+    .s_msx_B_Button = "B Button",
+    .s_msx_Press_Key = "Press Key",
+    //=====================================================================
+
+    // Core\Src\porting\md\main_amstrad.c ================================
+    .s_amd_Change_Dsk = "Change Dsk",
+    .s_amd_Controls = "Controls",
+    .s_amd_Controls_Joystick = "Joystick",
+    .s_amd_Controls_Keyboard = "Keyboard",
+    .s_amd_palette_Color = "Color",
+    .s_amd_palette_Green = "Green",
+    .s_amd_palette_Grey = "Grey",
+    .s_amd_Press_Key = "Press Key",
+    //=====================================================================
+
     // Core\Src\porting\gw\main_gw.c =======================================
     .s_copy_RTC_to_GW_time = "Copia RTC sull'orologio G&W",
     .s_copy_GW_time_to_RTC = "Copia orario G&W sull'RTC",
@@ -116,12 +164,12 @@ const lang_t lang_it_it LANG_DATA = {
     .s_Add_favorite = "Aggiungi ai preferiti",
     .s_Delete_save = "Elimina il salvataggio",
     .s_Confiem_del_save = "Eliminare il salvataggio?",
-#if GAME_GENIE == 1
-    .s_Game_Genie_Codes = "Codici Game Genie",
-    .s_Game_Genie_Codes_Title = "Codici Genie Codes",
-    .s_Game_Genie_Codes_ON = "\x6",
-    .s_Game_Genie_Codes_OFF = "\x5",
-#endif        
+#if CHEAT_CODES == 1
+    .s_Cheat_Codes = "Codici Cheat",
+    .s_Cheat_Codes_Title = "Codici Cheat",
+    .s_Cheat_Codes_ON = "\x6",
+    .s_Cheat_Codes_OFF = "\x5",
+#endif
 
     //=====================================================================
 
@@ -150,9 +198,6 @@ const lang_t lang_it_it LANG_DATA = {
     //.s_Close = "Fermer",
     .s_Debug_Title = "Debug",
     .s_Idle_power_off = "Spegnimento automatico",
-    .s_Splash_Option = "Animazione accensione",
-    .s_Splash_On = "\x6",
-    .s_Splash_Off = "\x5",
 
     .s_Time = "Ora",
     .s_Date = "Data",
@@ -175,6 +220,11 @@ const lang_t lang_it_it LANG_DATA = {
     .s_Weekday_Fri = "Ven",
     .s_Weekday_Sat = "Sab",
     .s_Weekday_Sun = "Dom",
+    .s_Turbo_Button = "Turbo",
+    .s_Turbo_None = "None",
+    .s_Turbo_A = "A",
+    .s_Turbo_B = "B",
+    .s_Turbo_AB = "A & B",
 
     .s_Title_Date_Format = "%02d-%02d %s %02d:%02d:%02d",
     .s_Date_Format = "%02d.%02d.20%02d %s",

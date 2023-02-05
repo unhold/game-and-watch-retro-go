@@ -11,6 +11,15 @@ static runtime_stats_t statistics;
 static runtime_counters_t counters;
 static uint skip;
 
+
+#define TURBOS_SPEED 10
+
+bool odroid_button_turbos(void) 
+{
+  int turbos = 1000 / TURBOS_SPEED;
+  return (get_elapsed_time() % turbos) < (turbos / 2);
+}
+
 void odroid_system_panic(const char *reason, const char *function, const char *file)
 {
     printf("*** PANIC: %s\n  *** FUNCTION: %s\n  *** FILE: %s\n", reason, function, file);
@@ -60,7 +69,15 @@ bool odroid_system_emu_load_state(int slot)
 bool odroid_system_emu_save_state(int slot)
 {
     if (currentApp.saveState != NULL) {
-        (*currentApp.saveState)("");
+#if OFF_SAVESTATE==1
+        if (slot == 0) {
+#endif
+            (*currentApp.saveState)("0");
+#if OFF_SAVESTATE==1
+        } else {
+            (*currentApp.saveState)("1");
+        }
+#endif
     }
     return true;
 };

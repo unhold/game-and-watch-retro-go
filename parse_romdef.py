@@ -91,6 +91,21 @@ class ROMParser:
         json_file = script_path / "roms" / "gw.json"
         self.parse_one(json_file, "gw",["gw"])
 
+        json_file = script_path / "roms" / "msx.json"
+        self.parse_one(json_file, "msx",["rom","mx1","mx2","cdk"])
+
+        json_file = script_path / "roms" / "wsv.json"
+        self.parse_one(json_file, "wsv",["bin","sv"])
+
+        json_file = script_path / "roms" / "md.json"
+        self.parse_one(json_file, "md",["md","bin","gen"])
+
+        json_file = script_path / "roms" / "a7800.json"
+        self.parse_one(json_file, "a7800",["a78","bin"])
+
+        json_file = script_path / "roms" / "amstrad.json"
+        self.parse_one(json_file, "amstrad",["dsk"])
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Define ROMs name & pulish to the build environment")
 

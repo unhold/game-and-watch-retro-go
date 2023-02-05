@@ -7,6 +7,11 @@ typedef enum {
     APPID_SMS      = 3,
     APPID_PCE      = 4,
     APPID_GW       = 5,
+    APPID_MSX      = 6,
+    APPID_WSV      = 7,
+    APPID_MD       = 8,
+    APPID_A7800    = 9,
+    APPID_AMSTRAD  = 10,
 
     APPID_COUNT,
 } appid_t;

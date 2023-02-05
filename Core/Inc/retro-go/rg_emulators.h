@@ -7,8 +7,8 @@
 #if !defined(COVERFLOW)
 #define COVERFLOW 0
 #endif /* COVERFLOW */
-#if !defined (GAME_GENIE)
-#define GAME_GENIE 0
+#if !defined (CHEAT_CODES)
+#define CHEAT_CODES 0
 #endif
 
 typedef enum
@@ -20,7 +20,7 @@ typedef enum
 typedef struct rom_system_t rom_system_t;
 
 typedef struct {
-#if GAME_GENIE == 1
+#if CHEAT_CODES == 1
     uint32_t id;
 #endif
     const char *name;
@@ -38,12 +38,14 @@ typedef struct {
     //size_t crc_offset;
     //uint32_t checksum;
     //bool missing_cover;
+    uint16_t mapper;
     rom_region_t region;
     const rom_system_t *system;
-#if GAME_GENIE == 1
-    const char** game_genie_codes; // Game Genie codes to choose from
-    const char** game_genie_descs; // Game Genie code descriptions
-    int game_genie_count;
+    uint16_t game_config;
+#if CHEAT_CODES == 1
+    const char** cheat_codes; // Cheat codes to choose from
+    const char** cheat_descs; // Cheat codes descriptions
+    int cheat_count;
 #endif
 } retro_emulator_file_t;
 
@@ -71,7 +73,7 @@ extern const unsigned int intflash_magic_sign;
 
 void emulators_init();
 void emulator_init(retro_emulator_t *emu);
-void emulator_start(retro_emulator_file_t *file, bool load_state, bool start_paused);
+void emulator_start(retro_emulator_file_t *file, bool load_state, bool start_paused, uint8_t save_slot);
 bool emulator_show_file_menu(retro_emulator_file_t *file);
 void emulator_show_file_info(retro_emulator_file_t *file);
 void emulator_crc32_file(retro_emulator_file_t *file);

@@ -16,8 +16,8 @@
   #define COVERFLOW 0
 #endif /* COVERFLOW */
 // Global
-#if !defined (GAME_GENIE)
-#define GAME_GENIE 0
+#if !defined (CHEAT_CODES)
+#define CHEAT_CODES 0
 #endif
 #if !defined (CODEPAGE)
 #define CODEPAGE 1252
@@ -40,12 +40,12 @@ typedef struct app_config {
     uint8_t sprite_limit;
 } app_config_t;
 
-#if GAME_GENIE == 1
-#if (MAX_GAME_GENIE_CODES > 32)
-#error MAX_GAME_GENIE_CODES is assumed to be 32. Changing this value requires adjusting the type of active_game_genie_codes below
+#if CHEAT_CODES == 1
+#if (MAX_CHEAT_CODES > 32)
+#error MAX_CHEAT_CODES is assumed to be 32. Changing this value requires adjusting the type of active_cheat_codes below
 #endif
 typedef struct rom_config {
-    uint32_t active_game_genie_codes; // A bit array for which game genie codes in retro_emulator_file_t.game_genie_codes are active for this rom
+    uint32_t active_cheat_codes; // A bit array for which cheat codes in retro_emulator_file_t.cheat_codes are active for this rom
 } rom_config_t;
 #endif
 
@@ -59,10 +59,10 @@ typedef struct persistent_config {
     uint8_t font_size;
     uint8_t theme;
     uint8_t colors;
+    uint8_t turbo_buttons;
     uint8_t font;
     uint8_t lang;
     uint8_t romlang;
-    uint8_t splashani;
     uint8_t startup_app;
     void *startup_file;
 
@@ -72,7 +72,7 @@ typedef struct persistent_config {
 
     app_config_t app[APPID_COUNT];
 
-#if GAME_GENIE == 1
+#if CHEAT_CODES == 1
     rom_config_t rom[ROM_COUNT]; // index is the same as 'id' in retro_emulator_file_t
 #endif
 
@@ -89,7 +89,8 @@ static const persistent_config_t persistent_config_default = {
     .font_size = 8,
     .theme = 2, //use as theme index
     .colors = 0,
-    .font = 8,
+    .turbo_buttons = 0,
+    .font = 18,
 #if CODEPAGE==12521
     .lang = 1,
 #elif CODEPAGE==12522
@@ -137,7 +138,6 @@ static const persistent_config_t persistent_config_default = {
 #else
     .romlang = 0,
 #endif
-    .splashani = 1,
     .startup_app = 0,
     .main_menu_timeout_s = 60 * 10, // Turn off after 10 minutes of idle time in the main menu
     .main_menu_selected_tab = 0,
@@ -159,8 +159,9 @@ static const persistent_config_t persistent_config_default = {
         {0}, // SMS
         {0}, // PCE
         {0}, // GW
+        {0}, // MD Genesis
     },
-#if GAME_GENIE == 1
+#if CHEAT_CODES == 1
     .rom = {{0}},
 #endif
 };
@@ -213,10 +214,10 @@ void odroid_settings_commit()
 
 void odroid_settings_reset()
 {
-#if GAME_GENIE == 1
+#if CHEAT_CODES == 1 
     for (int i = 0; i < ROM_COUNT; i++)
     {
-        persistent_config_ram.rom[i].active_game_genie_codes = 0;
+        persistent_config_ram.rom[i].active_cheat_codes = 0;
     };
 #endif
     memcpy(&persistent_config_ram, &persistent_config_default, sizeof(persistent_config_t));
@@ -240,16 +241,6 @@ int32_t odroid_settings_int32_get(const char *key, int32_t default_value)
 
 void odroid_settings_int32_set(const char *key, int32_t value)
 {
-}
-
-int8_t odroid_settings_splashani_get()
-{
-    return persistent_config_ram.splashani;
-}
-
-void odroid_settings_splashani_set(int8_t splashani)
-{
-    persistent_config_ram.splashani = splashani;
 }
 
 int8_t odroid_settings_colors_get()
@@ -289,6 +280,25 @@ void odroid_settings_font_set(int8_t font)
     else if (font >= gui_font_count)
         font = gui_font_count - 1;
     persistent_config_ram.font = font;
+}
+
+int8_t odroid_settings_turbo_buttons_get()
+{
+    int turbo_buttons = persistent_config_ram.turbo_buttons;
+    if (turbo_buttons < 0)
+        persistent_config_ram.turbo_buttons = 0;
+    else if (turbo_buttons >= 3)
+        persistent_config_ram.turbo_buttons = 3;
+    return persistent_config_ram.turbo_buttons;
+}
+
+void odroid_settings_turbo_buttons_set(int8_t turbo_buttons)
+{
+    if (turbo_buttons < 0)
+        turbo_buttons = 0;
+    else if (turbo_buttons >= 3)
+        turbo_buttons = 3;
+    persistent_config_ram.turbo_buttons = turbo_buttons;
 }
 
 
@@ -564,27 +574,27 @@ void odroid_settings_DisplayOverscan_set(int32_t value)
 }
 
 
-#if GAME_GENIE == 1
+#if CHEAT_CODES == 1 
 bool odroid_settings_ActiveGameGenieCodes_is_enabled(uint32_t rom_id, int code_index)
 {
-    if (rom_id < 0 || rom_id >= ROM_COUNT || code_index < 0 || code_index > MAX_GAME_GENIE_CODES) {
+    if (rom_id < 0 || rom_id >= ROM_COUNT || code_index < 0 || code_index > MAX_CHEAT_CODES) {
         return false;
     }
 
-    uint32_t active_game_genie_codes = persistent_config_ram.rom[rom_id].active_game_genie_codes;
-    return ((active_game_genie_codes >> code_index) & 0x1) == 1;
+    uint32_t active_cheat_codes = persistent_config_ram.rom[rom_id].active_cheat_codes;
+    return ((active_cheat_codes >> code_index) & 0x1) == 1;
 }
 
 bool odroid_settings_ActiveGameGenieCodes_set(uint32_t rom_id, int code_index, bool enable)
 {
-    if (rom_id < 0 || rom_id >= ROM_COUNT || code_index < 0 || code_index > MAX_GAME_GENIE_CODES) {
+    if (rom_id < 0 || rom_id >= ROM_COUNT || code_index < 0 || code_index > MAX_CHEAT_CODES) {
         return false;
     }
 
     if (enable) {
-        persistent_config_ram.rom[rom_id].active_game_genie_codes |= (1<<code_index);
+        persistent_config_ram.rom[rom_id].active_cheat_codes |= (1<<code_index);
     } else  {
-        persistent_config_ram.rom[rom_id].active_game_genie_codes &= ~(1<<code_index);
+        persistent_config_ram.rom[rom_id].active_cheat_codes &= ~(1<<code_index);
     }
 
     return true;
