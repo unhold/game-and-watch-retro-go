@@ -101,6 +101,7 @@ PT_PT ?= 1
 FR_FR ?= 1
 IT_IT ?= 1
 DE_DE ?= 1
+RU_RU ?= 1
 ZH_CN ?= 0
 ZH_TW ?= 0
 KO_KR ?= 0
@@ -121,6 +122,9 @@ else ifeq ($(CODEPAGE), 932)
 else ifeq ($(CODEPAGE), 949)
 	KO_KR = 1
 	SCODEPAGE = "euckr"
+else ifeq ($(CODEPAGE), 12511)
+	RU_RU = 1
+	SCODEPAGE = "windows-1251"
 else ifeq ($(CODEPAGE), 12521)
 	ES_ES = 1
 	SCODEPAGE = "iso-8859-1"
@@ -149,6 +153,8 @@ else ifeq ($(UICODEPAGE), 932)
 	JA_JP = 1
 else ifeq ($(UICODEPAGE), 949)
 	KO_KR = 1
+else ifeq ($(UICODEPAGE), 12511)
+	RU_RU = 1
 else ifeq ($(UICODEPAGE), 12521)
 	ES_ES = 1
 else ifeq ($(UICODEPAGE), 12522)
@@ -346,11 +352,12 @@ C_DEFS +=  \
 -DINCLUDED_PT_PT=$(PT_PT) \
 -DINCLUDED_FR_FR=$(FR_FR) \
 -DINCLUDED_IT_IT=$(IT_IT) \
+-DINCLUDED_DE_DE=$(DE_DE) \
+-DINCLUDED_RU_RU=$(RU_RU) \
 -DINCLUDED_ZH_CN=$(ZH_CN) \
 -DINCLUDED_ZH_TW=$(ZH_TW) \
 -DINCLUDED_KO_KR=$(KO_KR) \
 -DINCLUDED_JA_JP=$(JA_JP) \
--DINCLUDED_DE_DE=$(DE_DE) \
 -DONEFONT=$(FONT) \
 -DLANG=$(LANG) \
 -DCOVERFLOW=$(COVERFLOW) \
@@ -742,14 +749,15 @@ help:
 	@echo "  RESET_DBGMCU        - Configures if DBGMCU should be reset after flashing."
 	@echo "                        Set to 0 to disable power saving (default=1)"
 	@echo "  CODEPAGE            - Sets codepage to configures default display language.(default=1252)"
-	@echo "                        set 932 as Japanese; 936 as simple Chinese; 950 as traditional Chinese"
-	@echo "                        949 as Korean; 12521 as Spanish; 12522 as Portuguese; 12523 as French;"
-	@echo "                        12524 as Italian; 12525 as German;"
+	@echo "                        set 932 as Japanese; 936 as simple Chinese; 950 as traditional Chinese;"
+	@echo "                        949 as Korean; 12511 as Russian; 12521 as Spanish; 12522 as Portuguese;"
+	@echo "                        12523 as French; 12524 as Italian; 12525 as German;"
 	@echo "  UICODEPAGE          - Sets ui display language.(default=CODEPAGE=1252 as English)"
 	@echo "  ROMINFOCODE         - Sets encoding of parse rom name, default = ascii"
 	@echo "  ES_ES,PT_PT,FR_FR,  "
 	@echo "  IT_IT,ZH_CN,ZH_TW,  "
-	@echo "  KO_KR,JA_JP,DE_DE   - Set to 1 to include or exclude some other language"
+	@echo "  KO_KR,JA_JP,DE_DE,  "
+	@echo "  RU_RU               - Set to 1 to include or exclude some other language"
 	@echo "  FONT                - Only persist one font and set the font number. "
 	@echo "                        Font effect see: Core\\Inc\\retro-go\\fonts\\font_un_xx.h"
 	@echo "  COVERFLOW           - Set to 1 include cover art with rom (default=0)"
@@ -783,6 +791,7 @@ help:
 	@echo "  FR_FR=$(FR_FR)"
 	@echo "  IT_IT=$(IT_IT)"
 	@echo "  DE_DE=$(DE_DE)"
+	@echo "  RU_RU=$(RU_RU)"
 	@echo "  ZH_CN=$(ZH_CN)"
 	@echo "  ZH_TW=$(ZH_TW)"
 	@echo "  KO_KR=$(KO_KR)"
