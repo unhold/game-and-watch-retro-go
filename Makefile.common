@@ -54,9 +54,6 @@ else
 	endif
 endif
 
-# Configure overclocking
-OVERCLOCKING_LEVEL ?= 1
-
 # Configure external flash size in MB (Megabytes)
 EXTFLASH_SIZE_MB ?= 1
 INTFLASH_BANK ?= 1
@@ -389,7 +386,6 @@ C_DEFS +=  \
 -DGNW_TARGET_ZELDA=$(GNW_TARGET_ZELDA) \
 -DCHEAT_CODES=$(CHEAT_CODES) \
 -DTARGET_GNW \
--DOVERCLOCKING_LEVEL=$(OVERCLOCKING_LEVEL) \
 -DNO_EMBEDDED_SAMPLES \
 -D__LIBRETRO__ \
 -DZ80_CUSTOM_CONFIGURATION \
@@ -838,7 +834,6 @@ help:
 	@echo "  GAME_GENIE          - Set to 1 to enable game genie support (deprecated, use CHEAT_CODES instead)"
 	@echo "  CHEAT_CODES         - Set to 1 to enable cheat codes support (default=0)"
 	@echo "  SHARED_HIBERNATE_SAVESTATE - Set to 1 to enable a separate savestate for off/on (default=0)"
-	@echo "  OVERCLOCKING_LEVEL  - Set OC level. 0 no OC, 1 intermediate OC, 2 maximum OC (default=1)"
 	@echo ""
 	@echo "Current configuration:"
 	@echo "  EXTFLASH_FORCE_SPI=$(EXTFLASH_FORCE_SPI)"
@@ -861,7 +856,6 @@ help:
 	@echo "  COVERFLOW=$(COVERFLOW)"
 	@echo "  ROMINFOCODE=$(ROMINFOCODE)"
 	@echo "  SHARED_HIBERNATE_SAVESTATE=$(SHARED_HIBERNATE_SAVESTATE)"
-	@echo "  OVERCLOCKING_LEVEL=$(OVERCLOCKING_LEVEL)"
 	@echo "  ES_ES=$(ES_ES)"
 	@echo "  PT_PT=$(PT_PT)"
 	@echo "  FR_FR=$(FR_FR)"
