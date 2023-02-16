@@ -171,13 +171,19 @@ const lang_t lang_es_es LANG_DATA = {
     //=====================================================================
 
     // Core\Src\retro-go\rg_main.c =========================================
-    .s_CPU_Overclock = "CPU Overclock (%d)",
-    .s_CPU_Overclock_0 = "0 - Stock",
-    .s_CPU_Overclock_1 = "1 - Intermedio",
-    .s_CPU_Overclock_2 = "2 - Máximo",
+    .s_CPU_Overclock = "CPU Overclock",
+    .s_CPU_Overclock_0 = "No",
+    .s_CPU_Overclock_1 = "Intermedio",
+    .s_CPU_Overclock_2 = "Máximo",
+    .s_CPU_OC_Upgrade_to = "Upgrade to ",
+    .s_CPU_OC_Downgrade_to = "Downgrade to ",
+    .s_CPU_OC_Stay_at = "Stay at ",
+    .s_Confirm_OC_Reboot = "CPU Overclock configuration has changed and needs to be reboot. ¿Confirmar Reinicio?",
+#if INTFLASH_BANK == 2
     .s_Reboot = "Reiniciar",
-    .s_OC_Reboot_Tips = "(OC Necesidades)",
+    .s_Original_system = "Original system",
     .s_Confirm_Reboot = "¿Confirmar Reinicio?",
+#endif
     .s_Second_Unit = "s",
     .s_Version = "Ver.",
     .s_Author = "Por",
