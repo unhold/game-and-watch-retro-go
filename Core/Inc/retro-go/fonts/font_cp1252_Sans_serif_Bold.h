@@ -1315,7 +1315,7 @@ const char font_cp1252_Sans_serif_Bold[] FONT_DATA = {
      0x33, // OO..OO.
      0x3e, // .OOOOO.
      0x30, // ....OO.
-     0x33, // OO..OO.
+     0x1e, // .OOOO..
      /* 122 */ 
      0x00, // .......
      0x00, // .......
