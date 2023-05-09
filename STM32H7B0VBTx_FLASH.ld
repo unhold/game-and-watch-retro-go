@@ -63,14 +63,16 @@ _Min_Stack_Size = 20 * 1024; /* required amount of stack */
 
 
 /* Useful for scripts */
-__NULLPTR_LENGTH__  = 0x100;
+//__NULLPTR_LENGTH__  = 0x100;
+__NULLPTR_LENGTH__  = 0x0;
 __ITCMRAM_LENGTH__  = 64K;
 __DTCMRAM_LENGTH__  = 128K;
 __RAM_UC_LENGTH__   = 300K;
-__RAM_CORE_LENGTH__ = 68K;
+__RAM_CORE_LENGTH__ = 0K;
 __RAM_EMU_LENGTH__  = 1024K - __RAM_UC_LENGTH__ - __RAM_CORE_LENGTH__;
 __AHBRAM_LENGTH__   = 128K;
 __FLASH_LENGTH__    = DEFINED(__FLASH_LENGTH__) ? __FLASH_LENGTH__ : 128k;
+__FLASH2_LENGTH__   = 256K; /* bank2 */
 
 __EXTFLASH_TOTAL_LENGTH__ = DEFINED(__EXTFLASH_TOTAL_LENGTH__) ? __EXTFLASH_TOTAL_LENGTH__ : 1024K;
 __EXTFLASH_OFFSET__ = DEFINED(__EXTFLASH_OFFSET__) ? __EXTFLASH_OFFSET__ : 0;
@@ -85,7 +87,10 @@ __RAM_EMU_START__   = __RAM_CORE_START__ + __RAM_CORE_LENGTH__;
 __RAM_EMU_END__     = __RAM_EMU_START__ + __RAM_EMU_LENGTH__;
 
 /* saveflash.ld sets __SAVEFLASH_LENGTH__ */
+/* offsaveflash.ld sets __OFFSAVEFLASH_LENGTH__ */
 INCLUDE build/saveflash.ld
+INCLUDE build/cacheflash.ld
+INCLUDE build/offsaveflash.ld
 __CONFIGFLASH_LENGTH__ = 4096;
 __FBFLASH_LENGTH__ = ENABLE_SCREENSHOT ? ((320 * 240 * 2 + 4095) / 4096) * 4096 : 0;
 
@@ -102,7 +107,16 @@ __FBFLASH_LENGTH__ = ENABLE_SCREENSHOT ? ((320 * 240 * 2 + 4095) / 4096) * 4096 
  *            |   Executable emulator data and   |
  *            |         constant ROM data        |
  *            |                                  |
- *            +----------------------------------+  __EXTFLASH_END__  __SAVEFLASH_START__
+ *            +----------------------------------+  __EXTFLASH_END__ __CACHEFLASH_START__
+ *            |                                  |
+ *            |          Reserved space          |
+ *            |    to decompress Roms not        |
+ *            |         fitting in RAM           |
+ *            +----------------------------------+  __CACHEFLASH_END__  __OFFSAVEFLASH_START__
+ *            |                                  |
+ *            |        ON/OFF state save         |
+ *            |                                  |
+ *            +----------------------------------+  __OFFSAVEFLASH_END__  __SAVEFLASH_START__
  *            |                                  |
  *            |          Save States             |
  *            |                                  |
@@ -117,9 +131,13 @@ __FBFLASH_LENGTH__ = ENABLE_SCREENSHOT ? ((320 * 240 * 2 + 4095) / 4096) * 4096 
  *            |                                  |
  *            +----------------------------------+  __FBFLASH_END__
  */
-__EXTFLASH_LENGTH__ = __EXTFLASH_TOTAL_LENGTH__ - (__SAVEFLASH_LENGTH__ + __CONFIGFLASH_LENGTH__ + __FBFLASH_LENGTH__);
+__EXTFLASH_LENGTH__ = __EXTFLASH_TOTAL_LENGTH__ - (__CACHEFLASH_LENGTH__ + __OFFSAVEFLASH_LENGTH__ + __SAVEFLASH_LENGTH__ + __CONFIGFLASH_LENGTH__ + __FBFLASH_LENGTH__);
 __EXTFLASH_END__ = __EXTFLASH_START__ + __EXTFLASH_LENGTH__;
-__SAVEFLASH_START__ = __EXTFLASH_END__;
+__CACHEFLASH_START__ = __EXTFLASH_END__;
+__CACHEFLASH_END__   = __CACHEFLASH_START__ + __CACHEFLASH_LENGTH__;
+__OFFSAVEFLASH_START__ = __CACHEFLASH_END__;
+__OFFSAVEFLASH_END__   = __OFFSAVEFLASH_START__ + __OFFSAVEFLASH_LENGTH__;
+__SAVEFLASH_START__ = __OFFSAVEFLASH_END__;
 __SAVEFLASH_END__   = __SAVEFLASH_START__ + __SAVEFLASH_LENGTH__;
 __CONFIGFLASH_START__ = __SAVEFLASH_END__;
 __CONFIGFLASH_END__   = __CONFIGFLASH_START__ + __CONFIGFLASH_LENGTH__;
@@ -142,11 +160,14 @@ MEMORY
   AHBRAM   (xrw) : ORIGIN = 0x30000000, LENGTH =  __AHBRAM_LENGTH__
 
   /* FLASH */
-  FLASH    (xr ) : ORIGIN = __INTFLASH__,          LENGTH =  __FLASH_LENGTH__
-  EXTFLASH (xr ) : ORIGIN = __EXTFLASH_START__,  LENGTH = __EXTFLASH_LENGTH__
-  SAVEFLASH(xr ) : ORIGIN = __SAVEFLASH_START__, LENGTH = __SAVEFLASH_LENGTH__
+  FLASH      (xr ) : ORIGIN = __INTFLASH__,          LENGTH =  __FLASH_LENGTH__
+  FLASH2   (xr ) : ORIGIN = 0x08100000,          LENGTH = __FLASH2_LENGTH__
+  EXTFLASH   (xr ) : ORIGIN = __EXTFLASH_START__,  LENGTH = __EXTFLASH_LENGTH__
+  CACHEFLASH (xr ) : ORIGIN = __CACHEFLASH_START__,  LENGTH = __CACHEFLASH_LENGTH__
+  OFFSAVEFLASH (xr ) : ORIGIN = __OFFSAVEFLASH_START__, LENGTH = __OFFSAVEFLASH_LENGTH__
+  SAVEFLASH  (xr ) : ORIGIN = __SAVEFLASH_START__, LENGTH = __SAVEFLASH_LENGTH__
   CONFIGFLASH(xr ) : ORIGIN = __CONFIGFLASH_START__, LENGTH = __CONFIGFLASH_LENGTH__
-  FBFLASH(xr ) : ORIGIN = __FBFLASH_START__, LENGTH = __FBFLASH_LENGTH__
+  FBFLASH (xr ) : ORIGIN = __FBFLASH_START__, LENGTH = __FBFLASH_LENGTH__
 }
 
 
@@ -245,7 +266,7 @@ SECTIONS
   .overlay_nes __RAM_EMU_START__ : {
     . = ALIGN(4);
     __ram_emu_nes_start__ = .;
-    build/nes/*.o (.data. data* .text .text* .rodata .rodata*)
+    build/nes/*.o (.data .data* .text .text* .rodata .rodata*)
     . = ALIGN(4);
     _OVERLAY_NES_LOAD_END = .;
   } AT> EXTFLASH
@@ -294,7 +315,7 @@ SECTIONS
   .overlay_sms __RAM_EMU_START__ : {
       . = ALIGN(4);
     __ram_emu_sms_start__ = .;
-      build/smsplusgx/*.o (.data. data* .text .text* .rodata .rodata*)
+      build/smsplusgx/*.o (.data .data* .text .text* .rodata .rodata*)
       . = ALIGN(4);
       _OVERLAY_SMS_LOAD_END = .;
   } AT> EXTFLASH
@@ -316,7 +337,7 @@ SECTIONS
    .overlay_pce __RAM_EMU_START__ : {
       . = ALIGN(4);
     __ram_emu_pce_start__ = .;
-      build/pce/*.o (.data. data* .text .text* .rodata .rodata*)
+      build/pce/*.o (.data .data* .text .text* .rodata .rodata*)
       . = ALIGN(4);
       _OVERLAY_PCE_LOAD_END = .;
   } AT> EXTFLASH
@@ -339,10 +360,52 @@ SECTIONS
   _OVERLAY_PCE_BSS_SIZE = SIZEOF(.overlay_pce_bss);
   _PCE_ROM_UNPACK_BUFFER_SIZE = __RAM_EMU_START__ + __RAM_EMU_LENGTH__ - _PCE_ROM_UNPACK_BUFFER;
 
+  .overlay_msx __RAM_EMU_START__ : {
+    . = ALIGN(4);
+    __ram_emu_msx_start__ = .;
+    build/msx/*.o (.data .data* .text .text* .rodata .rodata*)
+    . = ALIGN(4);
+    _OVERLAY_MSX_LOAD_END = .;
+  } AT> EXTFLASH
+  _OVERLAY_MSX_LOAD_START = LOADADDR(.overlay_msx);
+  _OVERLAY_MSX_SIZE = SIZEOF(.overlay_msx);
+  .overlay_msx_bss _OVERLAY_MSX_LOAD_END : {
+    . = ALIGN(4);
+    _OVERLAY_MSX_BSS_START = .;
+    build/msx/*.o (.bss .bss*)
+    . = ALIGN(4);
+    build/msx/*.o (COMMON)
+    __ram_emu_msx_end__ = .;
+    _OVERLAY_MSX_BSS_END = .;
+    ASSERT(ABSOLUTE(_OVERLAY_MSX_BSS_END) < __RAM_EMU_END__, "Error: MSX BSS overflow");
+  }
+  _OVERLAY_MSX_BSS_SIZE = SIZEOF(.overlay_msx_bss);
+
+  .overlay_wsv __RAM_EMU_START__ : {
+    . = ALIGN(4);
+    __ram_emu_wsv_start__ = .;
+    build/wsv/*.o (.data .data* .text .text* .rodata .rodata*)
+    . = ALIGN(4);
+    _OVERLAY_WSV_LOAD_END = .;
+  } AT> EXTFLASH
+  _OVERLAY_WSV_LOAD_START = LOADADDR(.overlay_wsv);
+  _OVERLAY_WSV_SIZE = SIZEOF(.overlay_wsv);
+  .overlay_wsv_bss _OVERLAY_WSV_LOAD_END : {
+    . = ALIGN(4);
+    _OVERLAY_WSV_BSS_START = .;
+    build/wsv/*.o (.bss .bss*)
+    . = ALIGN(4);
+    build/wsv/*.o (COMMON)
+    __ram_emu_wsv_end__ = .;
+    _OVERLAY_WSV_BSS_END = .;
+    ASSERT(ABSOLUTE(_OVERLAY_WSV_BSS_END) < __RAM_EMU_END__, "Error: WSV BSS overflow");
+  }
+  _OVERLAY_WSV_BSS_SIZE = SIZEOF(.overlay_wsv_bss);
+
   .overlay_gw __RAM_EMU_START__ : {
     . = ALIGN(4);
     __ram_emu_gw_start__ = .;
-    build/gw/*.o (.data. data* .text .text* .rodata .rodata*)
+    build/gw/*.o (.data .data* .text .text* .rodata .rodata*)
     . = ALIGN(4);
     _OVERLAY_GW_LOAD_END = .;
   } AT> EXTFLASH
@@ -361,16 +424,96 @@ SECTIONS
   }
   _OVERLAY_GW_BSS_SIZE = SIZEOF(.overlay_gw_bss);
 
+  .overlay_md __RAM_EMU_START__ : {
+    . = ALIGN(4);
+    __ram_emu_md_start__ = .;
+    build/md/*.o (.data .data* .text .text* .rodata .rodata*)
+    . = ALIGN(4);
+    _OVERLAY_MD_LOAD_END = .;
+  } AT> EXTFLASH
+  _OVERLAY_MD_LOAD_START = LOADADDR(.overlay_md);
+  _OVERLAY_MD_SIZE = SIZEOF(.overlay_md);
+
+  .overlay_md_bss _OVERLAY_MD_LOAD_END : {
+    . = ALIGN(4);
+    _OVERLAY_MD_BSS_START = .;
+    build/md/*.o (.bss .bss*)
+    . = ALIGN(4);
+    build/md/*.o (COMMON)
+    __ram_emu_md_end__ = .;
+    _OVERLAY_MD_BSS_END = .;
+    ASSERT(ABSOLUTE(_OVERLAY_MD_BSS_END) < __RAM_EMU_END__, "Error: MD BSS overflow");
+  }
+  _OVERLAY_MD_BSS_SIZE = SIZEOF(.overlay_md_bss);
+
+  .overlay_a7800 __RAM_EMU_START__ : {
+    . = ALIGN(4);
+    __ram_emu_a7800_start__ = .;
+    build/a7800/*.o (.data .data* .text .text* .rodata .rodata*)
+    . = ALIGN(4);
+    _OVERLAY_A7800_LOAD_END = .;
+  } AT> EXTFLASH
+  _OVERLAY_A7800_LOAD_START = LOADADDR(.overlay_a7800);
+  _OVERLAY_A7800_SIZE = SIZEOF(.overlay_a7800);
+
+  .overlay_a7800_bss _OVERLAY_A7800_LOAD_END : {
+    . = ALIGN(4);
+    _OVERLAY_A7800_BSS_START = .;
+    build/a7800/*.o (.bss .bss*)
+    . = ALIGN(4);
+    build/a7800/*.o (COMMON)
+    __ram_emu_a7800_end__ = .;
+    _OVERLAY_A7800_BSS_END = .;
+    ASSERT(ABSOLUTE(_OVERLAY_A7800_BSS_END) < __RAM_EMU_END__, "Error: A7800 BSS overflow");
+  }
+  _OVERLAY_A7800_BSS_SIZE = SIZEOF(.overlay_a7800_bss);
+
+  .overlay_amstrad __RAM_EMU_START__ : {
+    . = ALIGN(4);
+    __ram_emu_amstrad_start__ = .;
+    build/amstrad/*.o (.data .data* .text .text* .rodata .rodata*)
+    . = ALIGN(4);
+    _OVERLAY_AMSTRAD_LOAD_END = .;
+  } AT> EXTFLASH
+  _OVERLAY_AMSTRAD_LOAD_START = LOADADDR(.overlay_amstrad);
+  _OVERLAY_AMSTRAD_SIZE = SIZEOF(.overlay_amstrad);
+
+  .overlay_amstrad_bss _OVERLAY_AMSTRAD_LOAD_END : {
+    . = ALIGN(4);
+    _OVERLAY_AMSTRAD_BSS_START = .;
+    build/amstrad/*.o (.bss .bss*)
+    . = ALIGN(4);
+    build/amstrad/*.o (COMMON)
+    __ram_emu_amstrad_end__ = .;
+    _OVERLAY_AMSTRAD_BSS_END = .;
+    ASSERT(ABSOLUTE(_OVERLAY_AMSTRAD_BSS_END) < __RAM_EMU_END__, "Error: AMSTRAD BSS overflow");
+  }
+  _OVERLAY_AMSTRAD_BSS_SIZE = SIZEOF(.overlay_amstrad_bss);
+
 
   /* Place this symbol after the last overlay definition */
   .overlay_end : {
     __extflash_end__ = .;
   } AT> EXTFLASH
 
-  ._ram_space_check_pce : {
-    . = . + SIZEOF(.overlay_pce);
-    . = . + SIZEOF(.overlay_pce_bss);
+  ._ram_space_check_md : {
+    . = . + SIZEOF(.overlay_md);
+    . = . + SIZEOF(.overlay_md_bss);
   } >RAM_EMU
+
+  ._cacheflash (NOLOAD) :
+  {
+    __cacheflash_start__ = .;
+    *(.cacheflash)
+    __cacheflash_end__ = .;
+  } > CACHEFLASH
+
+  ._offsaveflash (NOLOAD) :
+  {
+    __offsaveflash_start__ = .;
+    *(.offsaveflash)
+    __offsaveflash_end__ = .;
+  } > OFFSAVEFLASH
 
   ._saveflash (NOLOAD) :
   {
@@ -497,6 +640,15 @@ SECTIONS
     . = ALIGN(4);
     __flash_end__ = .;
   }
+
+  /* put *fast access* MSX read only stuff on the second bank */
+  .flash2 :
+  {
+    __flash2_start__ = .;
+    . = ALIGN(4);
+    *(.flash2)
+    __flash2_end__ = .;
+  } >FLASH2
 
   /* Uninitialized data section */
   . = ALIGN(4);

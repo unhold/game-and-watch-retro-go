@@ -29,8 +29,7 @@ int es_es_fmt_Time(char *outstr, const char *timefmt, uint16_t hour, uint16_t mi
 const lang_t lang_es_es LANG_DATA = {
     .codepage = 1252,
     .extra_font = NULL,
-    .s_LangUI = "UI Idioma",
-    .s_LangTitle = "Idioma",
+    .s_LangUI = "Idioma",
     .s_LangName = "Spanish",
     // Core\Src\porting\gb\main_gb.c =======================================
     .s_Palette = "Paleta",
@@ -41,14 +40,62 @@ const lang_t lang_es_es LANG_DATA = {
     .s_Default = "Por defecto",
     //=====================================================================
 
+    // Core\Src\porting\md\main_gwenesis.c ================================
+    .s_md_keydefine = "Teclas: A-B-C",
+    .s_md_Synchro = "Sincronía",
+    .s_md_Synchro_Audio = "AUDIO",
+    .s_md_Synchro_Vsync = "VSYNC",
+    .s_md_Dithering = "Tramado",
+    .s_md_Debug_bar = "Barra depuración",
+    .s_md_Option_ON = "\x6",
+    .s_md_Option_OFF = "\x5",
+    .s_md_AudioFilter = "Filtro de Audio",
+    .s_md_VideoUpscaler = "Video Sobreescalado",
+
+    //=====================================================================
+    // Core\Src\porting\md\main_wsv.c ================================
+    .s_wsv_palette_Default = "Por Defecto",
+    .s_wsv_palette_Amber = "Ambar",
+    .s_wsv_palette_Green = "Verde",
+    .s_wsv_palette_Blue = "Azul",
+    .s_wsv_palette_BGB = "BGB",
+    .s_wsv_palette_Wataroo = "Wataroo",
+    //=====================================================================
+
+    // Core\Src\porting\md\main_msx.c ================================
+    .s_msx_Change_Dsk = "Cambiar Dsk",
+    .s_msx_Select_MSX = "Selecionar MSX",
+    .s_msx_MSX1_EUR = "MSX1 (EUR)",
+    .s_msx_MSX2_EUR = "MSX2 (EUR)",
+    .s_msx_MSX2_JP = "MSX2+ (JP)",
+    .s_msx_Frequency = "Frecuencia",
+    .s_msx_Freq_Auto = "Auto",
+    .s_msx_Freq_50 = "50Hz",
+    .s_msx_Freq_60 = "60Hz",
+    .s_msx_A_Button = "Boton A",
+    .s_msx_B_Button = "Boton B",
+    .s_msx_Press_Key = "Pulsar tecla",
+    //=====================================================================
+
+    // Core\Src\porting\md\main_amstrad.c ================================
+    .s_amd_Change_Dsk = "Cambiar Dsk",
+    .s_amd_Controls = "Controles",
+    .s_amd_Controls_Joystick = "Joystick",
+    .s_amd_Controls_Keyboard = "Teclado",
+    .s_amd_palette_Color = "Color",
+    .s_amd_palette_Green = "Verde",
+    .s_amd_palette_Grey = "Gris",
+    .s_amd_Press_Key = "Pulsar tecla",
+    //=====================================================================
+
     // Core\Src\porting\gw\main_gw.c =======================================
     .s_copy_RTC_to_GW_time = "Copiar RTC a hora G&W",
     .s_copy_GW_time_to_RTC = "Copiar hora G&W a RTC",
     .s_LCD_filter = "Filtro LCD",
     .s_Display_RAM = "Mostrar RAM",
-    .s_Press_ACL = "Pulsar ACL or reset",
-    .s_Press_TIME = "Press TIME [B+TIME]",
-    .s_Press_ALARM = "Press ALARM [B+GAME]",
+    .s_Press_ACL = "Pulsar ACL o reset",
+    .s_Press_TIME = "Pulsar TIME [B+TIME]",
+    .s_Press_ALARM = "Pulsar ALARM [B+GAME]",
     .s_filter_0_none = "0-Ninguno",
     .s_filter_1_medium = "1-Medio",
     .s_filter_2_high = "2-Alto",
@@ -94,10 +141,10 @@ const lang_t lang_es_es LANG_DATA = {
     .s_Colors = "Colores",
     .s_Theme_Title = "UI Tema",
     .s_Theme_sList = "Listado",
-    .s_Theme_CoverV = "Flow V",
-    .s_Theme_CoverH = "Flow H",
-    .s_Theme_CoverLightV = "Light V",
-    .s_Theme_CoverLightH = "Light H",
+    .s_Theme_CoverV = "Fluir V",
+    .s_Theme_CoverH = "Fluir H",
+    .s_Theme_CoverLightV = "Ligero V",
+    .s_Theme_CoverLightH = "Ligero H",
     //=====================================================================
 
     // Core\Src\retro-go\rg_emulators.c ====================================
@@ -114,16 +161,29 @@ const lang_t lang_es_es LANG_DATA = {
     .s_Add_favorite = "Añadir favorito",
     .s_Delete_save = "Borrar guardado",
     .s_Confiem_del_save = "¿Borrar guardado?",
-#if GAME_GENIE == 1
-    .s_Game_Genie_Codes = "Game Genie Codes",
-    .s_Game_Genie_Codes_Title = "GG Options",
-    .s_Game_Genie_Codes_ON = "\x6",
-    .s_Game_Genie_Codes_OFF = "\x5",
+#if CHEAT_CODES == 1
+    .s_Cheat_Codes = "Codigos Cheat",
+    .s_Cheat_Codes_Title = "Opciones Cheat",
+    .s_Cheat_Codes_ON = "\x6",
+    .s_Cheat_Codes_OFF = "\x5",
 #endif        
 
     //=====================================================================
 
     // Core\Src\retro-go\rg_main.c =========================================
+    .s_CPU_Overclock = "CPU Overclock",
+    .s_CPU_Overclock_0 = "No",
+    .s_CPU_Overclock_1 = "Intermedio",
+    .s_CPU_Overclock_2 = "Máximo",
+    .s_CPU_OC_Upgrade_to = "Subir a ",
+    .s_CPU_OC_Downgrade_to = "Bajar a ",
+    .s_CPU_OC_Stay_at = "Permanecer en ",
+    .s_Confirm_OC_Reboot = "CPU Overclock la configuración ha cambiado y necesita reiniciar. ¿Confirmar Reinicio?",
+#if INTFLASH_BANK == 2
+    .s_Reboot = "Reiniciar",
+    .s_Original_system = "Sistema original",
+    .s_Confirm_Reboot = "¿Confirmar Reinicio?",
+#endif
     .s_Second_Unit = "s",
     .s_Version = "Ver.",
     .s_Author = "Por",
@@ -148,9 +208,6 @@ const lang_t lang_es_es LANG_DATA = {
     //.s_Close= "Cerrar",
     .s_Debug_Title = "Debug",
     .s_Idle_power_off = "Apagado automático",
-    .s_Splash_Option = "Splash Animation",
-    .s_Splash_On = "\x6",
-    .s_Splash_Off = "\x5",
 
     .s_Time = "Hora",
     .s_Date = "Fecha",
@@ -173,6 +230,11 @@ const lang_t lang_es_es LANG_DATA = {
     .s_Weekday_Fri = "Vie",
     .s_Weekday_Sat = "Sáb",
     .s_Weekday_Sun = "Dom",
+    .s_Turbo_Button = "Turbo",
+    .s_Turbo_None = "None",
+    .s_Turbo_A = "A",
+    .s_Turbo_B = "B",
+    .s_Turbo_AB = "A & B",    
 
     .s_Title_Date_Format = "%02d-%02d %s %02d:%02d:%02d",
     .s_Date_Format = "%02d.%02d.20%02d %s",

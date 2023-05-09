@@ -1,3 +1,6 @@
+#include "build/config.h"
+
+#ifdef ENABLE_EMULATOR_NES
 #include <odroid_system.h>
 
 #include <string.h>
@@ -24,6 +27,8 @@
 static uint samplesPerFrame;
 static uint32_t vsync_wait_ms = 0;
 
+static uint8_t save_slot_load = 0;
+
 static bool autoload = false;
 
 
@@ -40,7 +45,16 @@ static bool SaveState(char *pathName)
     printf("Saving state...\n");
 
     nes_state_save(nes_save_buffer, 24000);
-    store_save((uint8_t *) ACTIVE_FILE->save_address, nes_save_buffer, sizeof(nes_save_buffer));
+#if OFF_SAVESTATE==1
+    if (strcmp(pathName,"1") == 0) {
+        // Save in common save slot (during a power off)
+        store_save((uint8_t *) &__OFFSAVEFLASH_START__, nes_save_buffer, sizeof(nes_save_buffer));
+    } else {
+#endif
+        store_save((uint8_t *) ACTIVE_FILE->save_address, nes_save_buffer, sizeof(nes_save_buffer));
+#if OFF_SAVESTATE==1
+    }
+#endif
 
     return 0;
 }
@@ -432,6 +446,14 @@ void osd_getinput(void)
     };
     common_emu_input_loop(&joystick, options);
 
+    uint8_t turbo_buttons = odroid_settings_turbo_buttons_get();
+    bool turbo_a = (joystick.values[ODROID_INPUT_A] && (turbo_buttons & 1));
+    bool turbo_b = (joystick.values[ODROID_INPUT_B] && (turbo_buttons & 2));
+    bool turbo_button = odroid_button_turbos();
+    if (turbo_a)
+        joystick.values[ODROID_INPUT_A] = turbo_button;
+    if (turbo_b)
+        joystick.values[ODROID_INPUT_B] = ! turbo_button;
 
     if ((joystick.values[ODROID_INPUT_START]) || (joystick.values[ODROID_INPUT_X])) pad0 |= INP_PAD_START;
     if ((joystick.values[ODROID_INPUT_SELECT]) || (joystick.values[ODROID_INPUT_Y])) pad0 |= INP_PAD_SELECT;
@@ -524,14 +546,26 @@ void osd_loadstate()
 {
     if(autoload) {
         autoload = false;
-        LoadState("");
+
+#if OFF_SAVESTATE==1
+        if (save_slot_load == 1) {
+            // Load from common save slot if needed
+            nes_state_load((uint8_t *)&__OFFSAVEFLASH_START__, ACTIVE_FILE->save_size);
+        } else {
+#endif
+            LoadState("");
+#if OFF_SAVESTATE==1
+        }
+#endif
     }
 }
 
 
-int app_main_nes(uint8_t load_state, uint8_t start_paused)
+int app_main_nes(uint8_t load_state, uint8_t start_paused, uint8_t save_slot)
 {
     region_t nes_region;
+
+    save_slot_load = save_slot;
 
     memset(framebuffer1, 0x0, sizeof(framebuffer1));
     memset(framebuffer2, 0x0, sizeof(framebuffer2));
@@ -564,29 +598,31 @@ int app_main_nes(uint8_t load_state, uint8_t start_paused)
         HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t *) audiobuffer_dma, (2 * AUDIO_SAMPLE_RATE) / 60);
     }
 
-    int game_genie_count = 0;
-    const char **active_game_genie_codes = NULL;
-#if GAME_GENIE == 1
-    for(int i=0; i<MAX_GAME_GENIE_CODES && i<ACTIVE_FILE->game_genie_count; i++) {
+    int cheat_count = 0;
+    const char **active_cheat_codes = NULL;
+#if CHEAT_CODES == 1
+    for(int i=0; i<MAX_CHEAT_CODES && i<ACTIVE_FILE->cheat_count; i++) {
         if (odroid_settings_ActiveGameGenieCodes_is_enabled(ACTIVE_FILE->id, i)) {
-            game_genie_count++;
+            cheat_count++;
         }
     }
 
-    active_game_genie_codes = rg_alloc(game_genie_count * sizeof(char**), MEM_ANY);
-    for(int i=0, j=0; i<MAX_GAME_GENIE_CODES && i<ACTIVE_FILE->game_genie_count; i++) {
+    active_cheat_codes = rg_alloc(cheat_count * sizeof(char**), MEM_ANY);
+    for(int i=0, j=0; i<MAX_CHEAT_CODES && i<ACTIVE_FILE->cheat_count; i++) {
         if (odroid_settings_ActiveGameGenieCodes_is_enabled(ACTIVE_FILE->id, i)) {
-            active_game_genie_codes[j] = ACTIVE_FILE->game_genie_codes[i];
+            active_cheat_codes[j] = ACTIVE_FILE->cheat_codes[i];
             j++;
         }
     }
 #endif
 
-    nofrendo_start(ACTIVE_FILE->name, active_game_genie_codes, game_genie_count, nes_region, AUDIO_SAMPLE_RATE, false);
+    nofrendo_start(ACTIVE_FILE->name, active_cheat_codes, cheat_count, nes_region, AUDIO_SAMPLE_RATE, false);
 
-#if GAME_GENIE == 1
-    rg_free(active_game_genie_codes); // No need to clean up the objects in the array as they're allocated in read only space
+#if CHEAT_CODES == 1
+    rg_free(active_cheat_codes); // No need to clean up the objects in the array as they're allocated in read only space
 #endif
 
     return 0;
 }
+
+#endif

@@ -1,14 +1,13 @@
 #pragma once
-#if !defined (GAME_GENIE)
-#define GAME_GENIE 0
+#if !defined (CHEAT_CODES)
+#define CHEAT_CODES 0
 #endif
 typedef struct
 {
     const uint32_t codepage;
-    const unsigned char *extra_font; 
+    const char **extra_font; 
     const char *s_LangUI;
-    const char *s_LangTitle;
-    const char *s_LangName;
+    const char *s_LangName;  //used for English name
     // Core\Src\porting\gb\main_gb.c =======================================
     const char *s_Palette;
     //=====================================================================
@@ -16,6 +15,55 @@ typedef struct
     // const char *s_Palette "Palette" dul
     const char *s_Default;
     //=====================================================================
+
+    // Core\Src\porting\md\main_gwenesis.c ================================
+    const char *s_md_keydefine;
+    const char *s_md_Synchro;
+    const char *s_md_Synchro_Audio;
+    const char *s_md_Synchro_Vsync;
+    const char *s_md_Dithering;
+    const char *s_md_Debug_bar;
+    const char *s_md_Option_ON;
+    const char *s_md_Option_OFF;
+    const char *s_md_AudioFilter;
+    const char *s_md_VideoUpscaler;
+    //=====================================================================
+
+    // Core\Src\porting\md\main_wsv.c ================================
+    const char *s_wsv_palette_Default;
+    const char *s_wsv_palette_Amber;
+    const char *s_wsv_palette_Green;
+    const char *s_wsv_palette_Blue;
+    const char *s_wsv_palette_BGB;
+    const char *s_wsv_palette_Wataroo;
+    //=====================================================================
+
+    // Core\Src\porting\md\main_msx.c ================================
+    const char *s_msx_Change_Dsk;
+    const char *s_msx_Select_MSX;
+    const char *s_msx_MSX1_EUR;
+    const char *s_msx_MSX2_EUR;
+    const char *s_msx_MSX2_JP;
+    const char *s_msx_Frequency;
+    const char *s_msx_Freq_Auto;
+    const char *s_msx_Freq_50;
+    const char *s_msx_Freq_60;
+    const char *s_msx_A_Button;
+    const char *s_msx_B_Button;
+    const char *s_msx_Press_Key;
+    //=====================================================================
+
+    // Core\Src\porting\md\main_amstrad.c ================================
+    const char *s_amd_Change_Dsk;
+    const char *s_amd_Controls;
+    const char *s_amd_Controls_Joystick;
+    const char *s_amd_Controls_Keyboard;
+    const char *s_amd_palette_Color;
+    const char *s_amd_palette_Green;
+    const char *s_amd_palette_Grey;
+    const char *s_amd_Press_Key;
+    //=====================================================================
+
     // Core\Src\porting\gw\main_gw.c =======================================
     const char *s_copy_RTC_to_GW_time;
     const char *s_copy_GW_time_to_RTC;
@@ -83,14 +131,27 @@ typedef struct
     const char *s_Add_favorite;
     const char *s_Delete_save;
     const char *s_Confiem_del_save;
-#if GAME_GENIE == 1
-    const char *s_Game_Genie_Codes;
-    const char *s_Game_Genie_Codes_Title;
-    const char *s_Game_Genie_Codes_ON;
-    const char *s_Game_Genie_Codes_OFF;
+#if CHEAT_CODES == 1
+    const char *s_Cheat_Codes;
+    const char *s_Cheat_Codes_Title;
+    const char *s_Cheat_Codes_ON;
+    const char *s_Cheat_Codes_OFF;
 #endif    
     //=====================================================================
     // Core\Src\retro-go\rg_main.c =========================================
+    const char *s_CPU_Overclock;
+    const char *s_CPU_Overclock_0;
+    const char *s_CPU_Overclock_1;
+    const char *s_CPU_Overclock_2;
+    const char *s_CPU_OC_Upgrade_to;
+    const char *s_CPU_OC_Downgrade_to;
+    const char *s_CPU_OC_Stay_at;
+    const char *s_Confirm_OC_Reboot;
+#if INTFLASH_BANK == 2
+    const char *s_Reboot;
+    const char *s_Original_system;
+    const char *s_Confirm_Reboot;
+#endif
     const char *s_Second_Unit;
     const char *s_Version;
     const char *s_Author;
@@ -112,9 +173,6 @@ typedef struct
     const char *s_Disable_DBGMCU_CK;
     const char *s_Debug_Title;
     const char *s_Idle_power_off;
-    const char *s_Splash_Option;
-    const char *s_Splash_On;
-    const char *s_Splash_Off;
     const char *s_Time;
     const char *s_Date;
     const char *s_Time_Title;
@@ -137,6 +195,12 @@ typedef struct
     const char *s_Title_Date_Format;
     const char *s_Date_Format;
     const char *s_Time_Format;
+    const char *s_Turbo_Button;
+    const char *s_Turbo_None;
+    const char *s_Turbo_A;
+    const char *s_Turbo_B;
+    const char *s_Turbo_AB;
+
     const int (*fmt_Title_Date_Format)(char *outstr, const char *datefmt, uint16_t day, uint16_t month, const char *weekday, uint16_t hour, uint16_t minutes, uint16_t seconds);
     // const char *fmt_Title_Date_Format(outstr,datefmt,day,month,weekday,hour,minutes,seconds) sprintf(outstr,datefmt,day,month,weekday,hour,minutes,seconds)
     const int (*fmtDate)(char *outstr, const char *datefmt, uint16_t day, uint16_t month, uint16_t year, const char *weekday);

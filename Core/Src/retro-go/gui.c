@@ -9,6 +9,7 @@
 #include "gui.h"
 #include "gw_lcd.h"
 #include "bitmaps.h"
+#include "gw_linker.h"
 #include "main.h"
 #include "rg_i18n.h"
 
@@ -47,7 +48,7 @@
 #include "hw_jpeg_decoder.h"
 
 // reuse existing buffer from gw_lcd.h
-#define JPEG_BUFFER_SIZE ((uint32_t)sizeof(emulator_framebuffer) - 4)
+#define JPEG_BUFFER_SIZE 256*1024
 
 #define NOCOVER_HEIGHT ((uint32_t)(68))
 #define NOCOVER_WIDTH ((uint32_t)(68))
@@ -154,10 +155,10 @@ void gui_init_tab(tab_t *tab)
     /* setup JPEG decoder instance with 32bits aligned address */
     // reuse emulator buffer for JPEG decoder & DMA2 buffering
     // Direct access to DTCM is not allowed for DMA2D :(
-    pJPEG_Buffer = (uint8_t *)((uint32_t)&emulator_framebuffer + 4 - ((uint32_t)&emulator_framebuffer) % 4);
+    // We use emulator ram (__RAM_EMU_START__) which is not used at that point.
+    pJPEG_Buffer = (uint8_t *)((uint32_t)__RAM_EMU_START__ + 4 - ((uint32_t)__RAM_EMU_START__) % 4);
     pCover_Buffer = (uint16_t *)(pJPEG_Buffer + COVER_420_SIZE + 4 - COVER_420_SIZE % 4);
     assert(JPEG_DecodeToBufferInit((uint32_t)pJPEG_Buffer, JPEG_BUFFER_SIZE) == 0);
-    assert((COVER_420_SIZE + COVER_16BITS_SIZE + 12) <= sizeof(emulator_framebuffer));
     //printf("JPEG init done\n");
     /* -------------------------- */
 
@@ -475,7 +476,7 @@ void gui_draw_simple_list(int posx, tab_t *tab)
         listbox_item_t *item = &list->items[list->cursor];
         int h1 = LIST_Y_OFFSET + (LIST_HEIGHT - font_height) / 2;
         if (item)
-            i18n_draw_text_line(posx, h1, w, list->items[list->cursor].text, curr_colors->sel_c, curr_colors->bg_c, 0,curr_romlang);
+            i18n_draw_text_line(posx, h1, w, list->items[list->cursor].text, curr_colors->sel_c, curr_colors->bg_c, 0,curr_lang);
 
         int index_next = list->cursor + 1;
         int index_proior = list->cursor - 1;
@@ -498,7 +499,7 @@ void gui_draw_simple_list(int posx, tab_t *tab)
                     get_darken_pixel_d(curr_colors->dis_c, curr_colors->bg_c, (max_line - i) * 100 / max_line),
                     curr_colors->bg_c,
                     0,
-                    curr_romlang);
+                    curr_lang);
             index_next++;
             listbox_item_t *prior_item = gui_get_item_by_index(tab, &index_proior);
             if (prior_item)
@@ -510,7 +511,7 @@ void gui_draw_simple_list(int posx, tab_t *tab)
                     get_darken_pixel_d(curr_colors->dis_c, curr_colors->bg_c, (max_line - i) * 100 / max_line),
                     curr_colors->bg_c,
                     0,
-                    curr_romlang);
+                    curr_lang);
             index_proior--;
         }
         //draw currpostion
@@ -710,7 +711,7 @@ void gui_draw_coverlight_h(retro_emulator_file_t *file, int cover_position)
                                       ODROID_SCREEN_WIDTH,
                                       curr_colors->sel_c,
                                       curr_colors->bg_c,
-                                      curr_romlang);
+                                      curr_lang);
     }
     /* other cover */
     else
@@ -987,13 +988,13 @@ void gui_draw_coverflow_h(tab_t *tab) //------------
     {
         file = (retro_emulator_file_t *)item->arg;
         sprintf(str_buffer, "%s", file->name);
-        size_t width = i18n_get_text_width(str_buffer, curr_romlang);
+        size_t width = i18n_get_text_width(str_buffer, curr_lang);
         if (width > (ODROID_SCREEN_WIDTH - 24))
             width = ODROID_SCREEN_WIDTH - 24;
         int cap_top = (max_y - (cover_top + cover_height + 4) - font_height) / 2;
         cap_top = (cap_top < 0) ? 0 : ((cap_top > 8) ? 8 : cap_top);
         cap_top = max_y - font_height - cap_top; 
-        i18n_draw_text_line((ODROID_SCREEN_WIDTH - width) / 2, cap_top, width, str_buffer, curr_colors->sel_c, curr_colors->bg_c, 1, curr_romlang);
+        i18n_draw_text_line((ODROID_SCREEN_WIDTH - width) / 2, cap_top, width, str_buffer, curr_colors->sel_c, curr_colors->bg_c, 1, curr_lang);
     };
 };
 

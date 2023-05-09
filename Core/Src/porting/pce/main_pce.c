@@ -1,3 +1,6 @@
+#include "build/config.h"
+
+#ifdef ENABLE_EMULATOR_PCE
 #include <odroid_system.h>
 #include <string.h>
 #include "shared.h"
@@ -23,6 +26,7 @@
 #include "sound_pce.h"
 #include "appid.h"
 #include "lzma.h"
+#include "rg_i18n.h"
 
 //#define PCE_SHOW_DEBUG
 //#define XBUF_WIDTH 	(480 + 32)
@@ -45,7 +49,7 @@
 static uint16_t mypalette[256];
 static int current_height, current_width;
 static short audioBuffer_pce[ AUDIO_BUFFER_LENGTH_PCE * 2];
-static uint8_t emulator_framebuffer_pce[XBUF_WIDTH * XBUF_HEIGHT * 2];
+static uint8_t pce_framebuffer[XBUF_WIDTH * XBUF_HEIGHT * 2];
 static uint8_t PCE_EXRAM_BUF[0x8000];
 static int framePerSecond=0;
 
@@ -114,7 +118,7 @@ static const struct
 };
 
 uint8_t *osd_gfx_framebuffer(void){
-    return emulator_framebuffer_pce + FB_INTERNAL_OFFSET;
+    return pce_framebuffer + FB_INTERNAL_OFFSET;
 }
 
 void set_color(int index, uint8_t r, uint8_t g, uint8_t b) {
@@ -160,7 +164,7 @@ static void netplay_callback(netplay_event_t event, void *arg) {
 
 static bool SaveStateStm(char *pathName) {
     int pos=0;
-    uint8_t *pce_save_buf = emulator_framebuffer_pce;
+    uint8_t *pce_save_buf = pce_framebuffer;
     memset(pce_save_buf, 0x00, 76*1024); // 76K save size
 
     uint8_t *pce_save_header=(uint8_t *)SAVESTATE_HEADER;
@@ -180,24 +184,36 @@ static bool SaveStateStm(char *pathName) {
         }
     }
     assert(pos<76*1024);
-    store_save(ACTIVE_FILE->save_address, pce_save_buf, 76*1024);
+
+#if OFF_SAVESTATE==1
+    if (strcmp(pathName,"1") == 0) {
+        // Save in common save slot (during a power off)
+        store_save((const uint8_t *)&__OFFSAVEFLASH_START__, pce_save_buf, 76*1024);
+    } else {
+#endif
+        store_save(ACTIVE_FILE->save_address, pce_save_buf, 76*1024);
+#if OFF_SAVESTATE==1
+    }
+#endif
     sprintf(pce_log,"%08lX",PCE.ROM_CRC);
-    memset(emulator_framebuffer_pce,0,sizeof(emulator_framebuffer_pce));
+    memset(pce_framebuffer,0,sizeof(pce_framebuffer));
     return false;
 }
 
-static bool LoadStateStm(char *pathName) {
-    uint8_t *pce_save_buf = (uint8_t *)ACTIVE_FILE->save_address;
+static bool LoadStateAddr(char *pathName, uint8_t *saveAddr) {
+    uint8_t *pce_save_buf = (uint8_t *)saveAddr;
     if (ACTIVE_FILE->save_size==0) return true;
     sprintf(pce_log,"%ld",ACTIVE_FILE->save_size);
 
     pce_save_buf+=sizeof(SAVESTATE_HEADER) + 1;
 
     uint32_t *crc_ptr = (uint32_t *)pce_save_buf;
+#pragma GCC diagnostic ignored "-Warray-bounds"
     sprintf(pce_log,"%08lX",crc_ptr[0]);
     if (crc_ptr[0]!=PCE.ROM_CRC) {
         return true;
     }
+#pragma GCC diagnostic pop
 
     pce_save_buf+=sizeof(uint32_t);
 
@@ -217,6 +233,10 @@ static bool LoadStateStm(char *pathName) {
     gfx_reset(true);
     osd_gfx_set_mode(IO_VDC_SCREEN_WIDTH, IO_VDC_SCREEN_HEIGHT);
     return true;
+}
+
+static bool LoadStateStm(char *pathName) {
+    return LoadStateAddr(pathName, (uint8_t *)ACTIVE_FILE->save_address);
 }
 
 static void
@@ -501,7 +521,7 @@ void pce_osd_gfx_blit(bool drawFrame) {
     static uint32_t lastFPSTime = 0;
     static uint32_t frames = 0;
     if (!drawFrame) {
-        memset(emulator_framebuffer_pce,0,sizeof(emulator_framebuffer_pce));
+        memset(pce_framebuffer,0,sizeof(pce_framebuffer));
         return;
     }
 
@@ -581,7 +601,7 @@ void pce_osd_gfx_blit(bool drawFrame) {
     common_ingame_overlay();
     lcd_swap();
 
-    memset(emulator_framebuffer_pce,0,sizeof(emulator_framebuffer_pce));
+    memset(pce_framebuffer,0,sizeof(pce_framebuffer));
 }
 
 void pce_pcm_submit() {
@@ -602,7 +622,7 @@ void pce_pcm_submit() {
     }
 }
 
-int app_main_pce(uint8_t load_state, uint8_t start_paused) {
+int app_main_pce(uint8_t load_state, uint8_t start_paused, uint8_t save_slot) {
 
     if (start_paused) {
         common_emu_state.pause_after_frames = 2;
@@ -634,24 +654,24 @@ int app_main_pce(uint8_t load_state, uint8_t start_paused) {
     // Init PCE Core
     pce_init();
 
-#if GAME_GENIE == 1
-    int game_genie_count = 0;
-    const char **active_game_genie_codes = NULL;
-    for(int i=0; i<MAX_GAME_GENIE_CODES && i<ACTIVE_FILE->game_genie_count; i++) {
+#if CHEAT_CODES == 1
+    int cheat_count = 0;
+    const char **active_cheat_codes = NULL;
+    for(int i=0; i<MAX_CHEAT_CODES && i<ACTIVE_FILE->cheat_count; i++) {
         if (odroid_settings_ActiveGameGenieCodes_is_enabled(ACTIVE_FILE->id, i)) {
-            game_genie_count++;
+            cheat_count++;
         }
     }
 
-    active_game_genie_codes = rg_alloc(game_genie_count * sizeof(char**), MEM_ANY);
-    for(int i=0, j=0; i<MAX_GAME_GENIE_CODES && i<ACTIVE_FILE->game_genie_count; i++) {
+    active_cheat_codes = rg_alloc(cheat_count * sizeof(char**), MEM_ANY);
+    for(int i=0, j=0; i<MAX_CHEAT_CODES && i<ACTIVE_FILE->cheat_count; i++) {
         if (odroid_settings_ActiveGameGenieCodes_is_enabled(ACTIVE_FILE->id, i)) {
-            active_game_genie_codes[j] = ACTIVE_FILE->game_genie_codes[i];
+            active_cheat_codes[j] = ACTIVE_FILE->cheat_codes[i];
             j++;
         }
     }
-    PCE.patchs = (char **)active_game_genie_codes;
-    PCE.rp_count = game_genie_count;
+    PCE.patchs = (char **)active_cheat_codes;
+    PCE.rp_count = cheat_count;
 #endif
 
     LoadCartPCE();
@@ -659,8 +679,18 @@ int app_main_pce(uint8_t load_state, uint8_t start_paused) {
     printf("PCE Core initialized\n");
 
     // If user select "RESUME" in main menu
-    if (load_state) LoadStateStm(NULL);
-
+    if (load_state) {
+#if OFF_SAVESTATE==1
+        if (save_slot == 1) {
+            // Load from common save slot if needed
+            LoadStateAddr("",(uint8_t *)&__OFFSAVEFLASH_START__);
+        } else {
+#endif
+        LoadStateStm(NULL);
+#if OFF_SAVESTATE==1
+        }
+#endif
+    }
     // Main emulator loop
     printf("Main emulator loop start\n");
     odroid_gamepad_state_t joystick = {0};
@@ -674,6 +704,15 @@ int app_main_pce(uint8_t load_state, uint8_t start_paused) {
             ODROID_DIALOG_CHOICE_LAST
         };
         common_emu_input_loop(&joystick, options);
+        uint8_t turbo_buttons = odroid_settings_turbo_buttons_get();
+        bool turbo_a = (joystick.values[ODROID_INPUT_A] && (turbo_buttons & 1));
+        bool turbo_b = (joystick.values[ODROID_INPUT_B] && (turbo_buttons & 2));
+        bool turbo_button = odroid_button_turbos();
+        if (turbo_a)
+            joystick.values[ODROID_INPUT_A] = turbo_button;
+        if (turbo_b)
+            joystick.values[ODROID_INPUT_B] = !turbo_button;
+
         pce_input_read(&joystick);
 
         for (PCE.Scanline = 0; PCE.Scanline < 263; ++PCE.Scanline) {
@@ -698,7 +737,9 @@ int app_main_pce(uint8_t load_state, uint8_t start_paused) {
         PCE.MaxCycles -= Cycles;
         Cycles = 0;
     }
-#if GAME_GENIE == 1
-    rg_free(active_game_genie_codes); // No need to clean up the objects in the array as they're allocated in read only space
+#if CHEAT_CODES == 1
+    rg_free(active_cheat_codes); // No need to clean up the objects in the array as they're allocated in read only space
 #endif
 }
+
+#endif

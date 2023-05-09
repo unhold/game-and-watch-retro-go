@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include "appid.h"
+#include "main.h"
 #include "rg_emulators.h"
 #include "gui.h"
 #include "githash.h"
@@ -101,6 +102,42 @@ static bool color_shift_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t
 #if !defined(COVERFLOW)
 #define COVERFLOW 0
 #endif /* COVERFLOW */
+
+
+static bool main_menu_cpu_oc_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
+{
+    int cpu_oc = oc_level_gets();
+    if (event == ODROID_DIALOG_PREV) {
+        cpu_oc--;
+        if (cpu_oc < 0)
+            cpu_oc = 2;
+    }
+    else if (event == ODROID_DIALOG_NEXT) {
+        cpu_oc++;
+        if (cpu_oc > 2)
+            cpu_oc = 0;
+    }
+    oc_level_set(cpu_oc);
+    odroid_settings_cpu_oc_level_set(cpu_oc);
+    int cpu_oc1 = cpu_oc - oc_level_get();
+    char *s = (char *)(curr_lang->s_CPU_OC_Stay_at);
+    if (cpu_oc1 > 0)
+        s = (char *)(curr_lang->s_CPU_OC_Upgrade_to);
+    else if (cpu_oc1 < 0)
+        s = (char *)(curr_lang->s_CPU_OC_Downgrade_to);
+    switch (cpu_oc){
+    case 1:
+        sprintf(option->value, "%s%s", s, curr_lang->s_CPU_Overclock_1);
+        break;
+    case 2:
+        sprintf(option->value, "%s%s", s, curr_lang->s_CPU_Overclock_2);
+        break;
+    default:
+        sprintf(option->value, "%s%s", s, curr_lang->s_CPU_Overclock_0);
+        break;
+    }
+    return event == ODROID_DIALOG_ENTER;
+}
 
 static bool main_menu_timeout_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
 {
@@ -209,7 +246,7 @@ static bool colors_update_cb(odroid_dialog_choice_t *option, odroid_dialog_event
     //sprintf(option->value, "%s", curr_colors->name);
     return event == ODROID_DIALOG_ENTER;
 }
-#if (FONT_COUNT > 1)
+
 static bool font_update_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
 {
     int8_t font = odroid_settings_font_get();
@@ -234,11 +271,11 @@ static bool font_update_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t
             odroid_settings_font_set(0);
         }
     }
-    curr_font = (char *)gui_fonts[font];
+    curr_font = font;
     sprintf(option->value, "%d/%d Wg", font + 1, gui_font_count);
     return event == ODROID_DIALOG_ENTER;
 }
-#endif
+
 
 static bool lang_update_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
 {
@@ -260,43 +297,6 @@ static bool lang_update_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t
     return event == ODROID_DIALOG_ENTER;
 }
 
-
-static bool romlang_update_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
-{
-    int8_t lang = odroid_settings_romlang_get();
-
-    if (event == ODROID_DIALOG_PREV)
-    {
-        lang = odroid_settings_get_prior_lang(lang);
-        odroid_settings_romlang_set(lang);
-    }
-    else if (event == ODROID_DIALOG_NEXT)
-    {
-        lang = odroid_settings_get_next_lang(lang);
-        odroid_settings_romlang_set(lang);
-    }
-    curr_romlang = (lang_t *)gui_lang[lang];
-    sprintf(option->value, "%s", curr_romlang->s_LangName);
-    //sprintf(option->label, "%s", curr_lang->s_Lang);
-    return event == ODROID_DIALOG_ENTER;
-}
-
-
-static bool splashani_update_cb(odroid_dialog_choice_t *option, odroid_dialog_event_t event, uint32_t repeat)
-{
-    int8_t splashani = odroid_settings_splashani_get();
-
-    if ((event == ODROID_DIALOG_PREV) || (event == ODROID_DIALOG_NEXT))
-    {
-        splashani = splashani ? 0 : 1;
-        odroid_settings_splashani_set(splashani);
-    };
-
-    sprintf(option->value, "%s", splashani ? curr_lang->s_Splash_On : curr_lang->s_Splash_Off);
-    return event == ODROID_DIALOG_ENTER;
-}
-
-
 static inline bool tab_enabled(tab_t *tab)
 {
     int disabled_tabs = 0;
@@ -312,6 +312,18 @@ static inline bool tab_enabled(tab_t *tab)
     return (disabled_tabs == gui.tabcount) || (tab->initialized && !tab->is_empty);
 }
 
+#if INTFLASH_BANK == 2
+void soft_reset_do(void)
+{
+    uint32_t addr = 0x08000000;
+    //         0x08000000;//APP_ADDR0;
+    *((uint32_t *)0x2001FFF8) = 0x544F4F42; // "BOOT"
+    *((uint32_t *)0x2001FFFC) = 0x08000000; // vector table
+
+    NVIC_SystemReset();
+}
+#endif
+
 void retro_loop()
 {
     tab_t *tab = gui_get_current_tab();
@@ -319,6 +331,9 @@ void retro_loop()
     int repeat = 0;
     int selected_tab_last = -1;
     uint32_t idle_s;
+
+#pragma GCC diagnostic ignored "-Wint-conversion"
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
 
     // Read the initial state as to not trigger on button held down during boot
     odroid_input_read_gamepad(&gui.joystick);
@@ -401,6 +416,8 @@ void retro_loop()
                     {9, curr_lang->s_Author, "ducalex", 1, NULL},
                     {9, curr_lang->s_Author_, "kbeckmann", 1, NULL},
                     {9, curr_lang->s_Author_, "stacksmashing", 1, NULL},
+                    {9, curr_lang->s_Author_, "Sylver Bruneau", 1, NULL},
+                    {9, curr_lang->s_Author_, "bzhxx", 1, NULL},
                     {9, curr_lang->s_UI_Mod, "orzeus", 1, NULL},
                     ODROID_DIALOG_CHOICE_SEPARATOR,
                     {1, curr_lang->s_Lang, curr_lang->s_LangAuthor, 1, NULL},
@@ -493,40 +510,39 @@ void retro_loop()
             }
             else if ((last_key == ODROID_INPUT_VOLUME) || (last_key == ODROID_INPUT_Y))
             {
-                char splashani_value[16];
-#if (FONT_COUNT > 1)
                 char font_value[16];
-#endif
                 char timeout_value[16];
                 char theme_value[16];
                 char colors_value[16];
-                char UIlang_value[64];
                 char lang_value[64];
+                char ov_value[64];
 
                 odroid_dialog_choice_t choices[] = {
                     ODROID_DIALOG_CHOICE_SEPARATOR,
+                    {0, curr_lang->s_Font, font_value, 1, &font_update_cb},
+                    {0, curr_lang->s_LangUI, lang_value, 1, &lang_update_cb},
 #if COVERFLOW != 0
                      //ODROID_DIALOG_CHOICE_SEPARATOR,
                     {0, curr_lang->s_Theme_Title, theme_value, 1, &theme_update_cb},
 #endif
                     {0x0F0F0E0E, curr_lang->s_Colors, colors_value, 1, &colors_update_cb},
-                    {0, curr_lang->s_Splash_Option, splashani_value, 1, &splashani_update_cb},
-                    ODROID_DIALOG_CHOICE_SEPARATOR,
-#if (FONT_COUNT > 1)
-                    {0, curr_lang->s_Font, font_value, 1, &font_update_cb},
-#endif
-                    {0, curr_lang->s_LangUI, UIlang_value, 1, &lang_update_cb},
-                    {0, curr_lang->s_LangTitle, lang_value, 1, &romlang_update_cb},
                     ODROID_DIALOG_CHOICE_SEPARATOR,
                     {0, curr_lang->s_Idle_power_off, timeout_value, 1, &main_menu_timeout_cb},
-                    // {0, "Color theme", "1/10", 1, &color_shift_cb},
-                    // {0, "Font size", "Small", 1, &font_size_cb},
-                    // {0, "Show cover", "Yes", 1, &show_cover_cb},
-                    // {0, "Show empty", "Yes", 1, &show_empty_cb},
-                    // {0, "---", "", -1, NULL},
-                    // {0, "Startup app", "Last", 1, &startup_app_cb},
+                    ODROID_DIALOG_CHOICE_SEPARATOR,
+                    {0, curr_lang->s_CPU_Overclock, ov_value, 1, &main_menu_cpu_oc_cb},
+#if INTFLASH_BANK == 2
+                    //{9, curr_lang->s_Reboot, curr_lang->s_Original_system, 1, NULL},
+#endif
                     ODROID_DIALOG_CHOICE_LAST};
-                odroid_overlay_settings_menu(choices);
+                int r = odroid_overlay_settings_menu(choices);
+#if INTFLASH_BANK == 2
+                if (r == 9)
+                    soft_reset_do();
+#endif
+                if (oc_level_gets() != oc_level_get())
+                    //reboot;
+                    if (odroid_overlay_confirm(curr_lang->s_Confirm_OC_Reboot, false) == 1)
+                        odroid_system_switch_app(0);
                 gui_redraw();
             }
             // TIME menu
@@ -720,21 +736,11 @@ void app_check_data_loop()
 
 void app_start_logo()
 {
-    if (! odroid_settings_splashani_get())
-        return;
+    const retro_logo_image* logos[] =   {&logo_nitendo, &logo_sega,     &logo_nitendo, &logo_sega,  &logo_nitendo, &logo_pce,    &logo_sega,  &logo_coleco, &logo_microsoft, &logo_watara, &logo_sega,  &logo_atari,   &logo_amstrad};
+    const retro_logo_image* headers[] = {&header_gb,    &header_sg1000, &header_nes,   &header_gg,  &header_gw,    &header_pce,  &header_sms, &header_col,  &header_msx,     &header_wsv,  &header_gen, &header_a7800, &header_amstrad};
     odroid_overlay_draw_fill_rect(0, 0, ODROID_SCREEN_WIDTH, ODROID_SCREEN_HEIGHT, curr_colors->bg_c);
-    //tab_t *tab = gui_get_tab(odroid_settings_MainMenuSelectedTab_get());
-    //tab = tab ? tab : gui_get_tab(0);
-    tab_t *tab = gui_set_current_tab(odroid_settings_MainMenuSelectedTab_get());
-    retro_logo_image *l_top = (retro_logo_image *)(tab->img_header);
-    retro_logo_image *l_bot = (retro_logo_image *)(tab->img_logo);
-
-    const retro_logo_image* logos[] =   {&logo_nitendo, &logo_sega,     &logo_nitendo, &logo_sega,  &logo_nitendo, &logo_pce,    &logo_sega,  &logo_coleco};
-    const retro_logo_image* headers[] = {&header_gb,    &header_sg1000, &header_nes,   &header_gg,  &header_gw,    &header_pce,  &header_sms, &header_col};
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 13; i++)
     {
-        if (l_top == (retro_logo_image *)headers[i])
-            l_bot = (retro_logo_image *)logos[i];
         odroid_overlay_draw_fill_rect(0, 0, ODROID_SCREEN_WIDTH, ODROID_SCREEN_HEIGHT, curr_colors->bg_c);
         odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - ((retro_logo_image *)(headers[i]))->width) / 2, 90, (retro_logo_image *)(headers[i]), curr_colors->sel_c);
         odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - ((retro_logo_image *)(logos[i]))->width) / 2, 160 + (40 - ((retro_logo_image *)(logos[i]))->height) / 2, (retro_logo_image *)(logos[i]), curr_colors->dis_c);
@@ -743,17 +749,28 @@ void app_start_logo()
         for (int j = 0; j < 5; j++)
         {
             wdog_refresh();
-            HAL_Delay(9);
+            HAL_Delay(10);
         }
     }
+}
 
+void app_logo()
+{
     odroid_overlay_draw_fill_rect(0, 0, ODROID_SCREEN_WIDTH, ODROID_SCREEN_HEIGHT, curr_colors->bg_c);
-    odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - l_top->width) / 2, 90, l_top, curr_colors->sel_c);
-    odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - l_bot->width) / 2, 160 + (40 - l_bot->height) / 2, l_bot, curr_colors->dis_c);
-    lcd_sync();
-    lcd_swap();
+    for (int i = 1; i <= 10; i++)
+    {
+        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_gnw.width) / 2, 90,(retro_logo_image *)(&logo_gnw), 
+            get_darken_pixel_d(curr_colors->sel_c, curr_colors->bg_c, i * 10));
 
-    for (int i = 0; i < 30; i++)
+        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_rgo.width) / 2, 174, (retro_logo_image *)(&logo_rgo), 
+           get_darken_pixel_d(curr_colors->dis_c,curr_colors->bg_c, i * 10));
+
+        lcd_sync();
+        lcd_swap();
+        wdog_refresh();
+        HAL_Delay(i * 2);
+    }
+    for (int i = 0; i < 20; i++)
     {
         wdog_refresh();
         HAL_Delay(10);
@@ -762,22 +779,21 @@ void app_start_logo()
 
 void app_sleep_logo()
 {
-    lcd_set_buffers(framebuffer1, framebuffer2);
     odroid_overlay_draw_fill_rect(0, 0, ODROID_SCREEN_WIDTH, ODROID_SCREEN_HEIGHT, curr_colors->bg_c);
     
-    odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_gnw.width) / 2, 72, (retro_logo_image *)(&logo_gnw), curr_colors->sel_c);
-    odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_rgo.width) / 2, 200, (retro_logo_image *)(&logo_rgo), curr_colors->dis_c);
-    for (int i = 0; i < 40; i++)
+    odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_gnw.width) / 2, 90, (retro_logo_image *)(&logo_gnw), curr_colors->sel_c);
+    odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_rgo.width) / 2, 174, (retro_logo_image *)(&logo_rgo), curr_colors->dis_c);
+    for (int i = 0; i < 100; i++)
     {
         wdog_refresh();
         HAL_Delay(10);
     }
     for (int i = 10; i <= 100; i++)
     {
-        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_gnw.width) / 2, 72,(retro_logo_image *)(&logo_gnw), 
+        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_gnw.width) / 2, 90,(retro_logo_image *)(&logo_gnw), 
             get_darken_pixel_d(curr_colors->sel_c, curr_colors->bg_c, 110 - i));
 
-        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_rgo.width) / 2, 200, (retro_logo_image *)(&logo_rgo), 
+        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_rgo.width) / 2, 174, (retro_logo_image *)(&logo_rgo), 
            get_darken_pixel_d(curr_colors->dis_c,curr_colors->bg_c, 110 - i));
 
         lcd_sync();
@@ -787,11 +803,19 @@ void app_sleep_logo()
     }
 }
 
-void app_main(void)
+void app_main(uint8_t boot_mode)
 {
 
     lcd_set_buffers(framebuffer1, framebuffer2);
     odroid_system_init(ODROID_APPID_LAUNCHER, 32000);
+    uint8_t oc = odroid_settings_cpu_oc_level_get();
+    if (oc != oc_level_get())
+    {
+        //reboot to oc level;
+        oc_level_set(oc);
+        boot_magic_set(BOOT_MAGIC_STANDBY);
+        odroid_system_switch_app(9);
+    }    
     odroid_overlay_draw_fill_rect(0, 0, ODROID_SCREEN_WIDTH, ODROID_SCREEN_HEIGHT, curr_colors->bg_c);
     // odroid_display_clear(0);
 
@@ -799,7 +823,10 @@ void app_main(void)
     app_check_data_loop();
     emulators_init();
 
-    app_start_logo();
+    app_logo();
+
+    if (boot_mode != 2)
+        app_start_logo();
 
     // favorites_init();
 
@@ -808,7 +835,7 @@ void app_main(void)
     // gui instead of the last ROM as a fallback.
     retro_emulator_file_t *file = odroid_settings_StartupFile_get();
     if (emulator_is_file_valid(file) && ((GW_GetBootButtons() & B_TIME) == 0)) {
-        emulator_start(file, (file->save_address != 0), true);
+        emulator_start(file, (file->save_address != 0), true, 1);
     }
     else
     {

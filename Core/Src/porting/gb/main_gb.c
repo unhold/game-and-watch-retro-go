@@ -1,3 +1,6 @@
+#include "build/config.h"
+
+#ifdef ENABLE_EMULATOR_GB
 #include <odroid_system.h>
 #include <string.h>
 #include <assert.h>
@@ -20,12 +23,14 @@
 #include "common.h"
 #include "rom_manager.h"
 #include "appid.h"
+#include "gw_malloc.h"
 
 #define NVS_KEY_SAVE_SRAM "sram"
 
 // Use 60Hz for GB
 #define AUDIO_BUFFER_LENGTH_GB (AUDIO_SAMPLE_RATE / 60)
 #define AUDIO_BUFFER_LENGTH_DMA_GB ((2 * AUDIO_SAMPLE_RATE) / 60)
+static int16_t *audiobuffer_emulator;
 
 static odroid_video_frame_t update1 = {GB_WIDTH, GB_HEIGHT, GB_WIDTH * 2, 2, 0xFF, -1, NULL, NULL, 0, {}};
 static odroid_video_frame_t update2 = {GB_WIDTH, GB_HEIGHT, GB_WIDTH * 2, 2, 0xFF, -1, NULL, NULL, 0, {}};
@@ -33,6 +38,8 @@ static odroid_video_frame_t *currentUpdate = &update1;
 
 static bool saveSRAM = false;
 static int  saveSRAM_Timer = 0;
+
+static uint8_t gb_framebuffer[GB_WIDTH*GB_HEIGHT*sizeof(uint16_t)];
 
 // --- MAIN
 
@@ -164,8 +171,6 @@ static void screen_blit_bilinear(int32_t dest_width)
     lcd_swap();
 }
 
-__attribute__((optimize("unroll-loops")))
-__attribute__((section (".itcram_hot_text")))
 static inline void screen_blit_v3to5(void) {
     static uint32_t lastFPSTime = 0;
     static uint32_t frames = 0;
@@ -228,8 +233,6 @@ static inline void screen_blit_v3to5(void) {
 }
 
 
-__attribute__((optimize("unroll-loops")))
-__attribute__((section (".itcram_hot_text")))
 static inline void screen_blit_jth(void) {
     static uint32_t lastFPSTime = 0;
     static uint32_t frames = 0;
@@ -379,7 +382,16 @@ static bool SaveState(char *pathName)
     // as a temporary save buffer.
     memset(GB_ROM_SRAM_CACHE,  '\x00', STATE_SAVE_BUFFER_LENGTH);
     size_t size = gb_state_save(GB_ROM_SRAM_CACHE, STATE_SAVE_BUFFER_LENGTH);
-    store_save(ACTIVE_FILE->save_address, GB_ROM_SRAM_CACHE, size);
+#if OFF_SAVESTATE==1
+    if (strcmp(pathName,"1") == 0) {
+        // Save in common save slot (during a power off)
+        store_save((const uint8_t *)&__OFFSAVEFLASH_START__, GB_ROM_SRAM_CACHE, size);
+    } else {
+#endif
+        store_save(ACTIVE_FILE->save_address, GB_ROM_SRAM_CACHE, size);
+#if OFF_SAVESTATE==1
+    }
+#endif
 
     // Restore the cache that was overwritten above.
     gb_loader_restore_cache();
@@ -506,18 +518,17 @@ void pcm_submit() {
     }
 }
 
-
-rg_app_desc_t * init(uint8_t load_state)
+rg_app_desc_t * init(uint8_t load_state, uint8_t save_slot)
 {
     odroid_system_init(APPID_GB, AUDIO_SAMPLE_RATE);
     odroid_system_emu_init(&LoadState, &SaveState, &netplay_callback);
 
     // bzhxx : fix LCD glitch at the start by cleaning up the buffer emulator
-    memset(emulator_framebuffer, 0x0, sizeof(emulator_framebuffer));
+    memset(gb_framebuffer, 0x0, sizeof(gb_framebuffer));
 
     // Hack: Use the same buffer twice
-    update1.buffer = emulator_framebuffer;
-    update2.buffer = emulator_framebuffer;
+    update1.buffer = gb_framebuffer;
+    update2.buffer = gb_framebuffer;
 
     //saveSRAM = odroid_settings_app_int32_get(NVS_KEY_SAVE_SRAM, 0);
     saveSRAM = false;
@@ -541,12 +552,12 @@ rg_app_desc_t * init(uint8_t load_state)
     fb.blit_func = &blit;
 
     // Audio
-    memset(audiobuffer_emulator, 0, sizeof(audiobuffer_emulator));
+    audiobuffer_emulator = ahb_calloc(sizeof(uint16_t),AUDIO_BUFFER_LENGTH_GB);
     memset(&pcm, 0, sizeof(pcm));
     pcm.hz = AUDIO_SAMPLE_RATE;
     pcm.stereo = 0;
     pcm.len = AUDIO_BUFFER_LENGTH_GB;
-    pcm.buf = (n16*)&audiobuffer_emulator;
+    pcm.buf = (n16*)audiobuffer_emulator;
     pcm.pos = 0;
 
     memset(audiobuffer_dma, 0, sizeof(audiobuffer_dma));
@@ -559,15 +570,24 @@ rg_app_desc_t * init(uint8_t load_state)
     pal_set_dmg(odroid_settings_Palette_get());
 
     if (load_state) {
-        LoadState("");
+#if OFF_SAVESTATE==1
+        if (save_slot == 1) {
+            // Load from common save slot if needed
+            gb_state_load((const uint8_t *)&__OFFSAVEFLASH_START__, ACTIVE_FILE->save_size);
+        } else {
+#endif
+            LoadState("");
+#if OFF_SAVESTATE==1
+        }
+#endif
     }
 
     return app;
 }
 
-void app_main_gb(uint8_t load_state, uint8_t start_paused)
+void app_main_gb(uint8_t load_state, uint8_t start_paused, uint8_t save_slot)
 {
-    init(load_state);
+    init(load_state, save_slot);
     odroid_gamepad_state_t joystick;
 
     if (start_paused) {
@@ -592,6 +612,15 @@ void app_main_gb(uint8_t load_state, uint8_t start_paused)
             ODROID_DIALOG_CHOICE_LAST
         };
         common_emu_input_loop(&joystick, options);
+
+        uint8_t turbo_buttons = odroid_settings_turbo_buttons_get();
+        bool turbo_a = (joystick.values[ODROID_INPUT_A] && (turbo_buttons & 1));
+        bool turbo_b = (joystick.values[ODROID_INPUT_B] && (turbo_buttons & 2));
+        bool turbo_button = odroid_button_turbos();
+        if (turbo_a)
+            joystick.values[ODROID_INPUT_A] = turbo_button;
+        if (turbo_b)
+            joystick.values[ODROID_INPUT_B] = !turbo_button;
 
         pad_set(PAD_UP, joystick.values[ODROID_INPUT_UP]);
         pad_set(PAD_RIGHT, joystick.values[ODROID_INPUT_RIGHT]);
@@ -633,3 +662,5 @@ void app_main_gb(uint8_t load_state, uint8_t start_paused)
         }
     }
 }
+
+#endif

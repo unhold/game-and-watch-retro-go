@@ -20,8 +20,16 @@ LARGE_FLASH ?= 0
 EXTFLASH_OFFSET ?= 0
 
 # Configure Game & Watch target device mario|zelda
-GNW_TARGET ?= mario
+ifneq ($(findstring flash,$(MAKECMDGOALS)),flash)
+	GNW_TARGET ?= mario
+endif
 
+OFF_SAVESTATE = 0
+ifeq ($(SHARED_HIBERNATE_SAVESTATE),1)
+	OFF_SAVESTATE = 1
+endif
+
+# Configure Game & Watch target device mario|zelda
 # Set the preprocessor options
 ifeq ($(GNW_TARGET),mario)
 	GNW_TARGET_ZELDA = 0
@@ -30,7 +38,7 @@ else ifeq ($(GNW_TARGET),zelda)
 	GNW_TARGET_ZELDA = 1
 	GNW_TARGET_MARIO = 0
 else
-$(error Invalid GNW_TARGET. Valid values {mario|zelda})
+$(error Missing or invalid GNW_TARGET option. Valid values {mario|zelda})
 endif
 
 # Configure external flash size by setting EXTFLASH_SIZE
@@ -64,7 +72,10 @@ endif
 # Screenshot support allocates 150kB of external flash. Disabled by default.
 ENABLE_SCREENSHOT ?= 0
 # Set to 1 to add game genie support
-GAME_GENIE ?= 0
+CHEAT_CODES ?= 0
+ifeq ($(GAME_GENIE),1)
+	CHEAT_CODES = 1
+endif
 
 # Compress supported ROMs by default. Set to 0 to disable.
 COMPRESS ?= lzma
@@ -101,11 +112,11 @@ PT_PT ?= 1
 FR_FR ?= 1
 IT_IT ?= 1
 DE_DE ?= 1
+RU_RU ?= 1
 ZH_CN ?= 0
 ZH_TW ?= 0
 KO_KR ?= 0
 JA_JP ?= 0
-FONT ?=0
 
 SCODEPAGE = "ascii"
 
@@ -121,6 +132,9 @@ else ifeq ($(CODEPAGE), 932)
 else ifeq ($(CODEPAGE), 949)
 	KO_KR = 1
 	SCODEPAGE = "euckr"
+else ifeq ($(CODEPAGE), 12511)
+	RU_RU = 1
+	SCODEPAGE = "windows-1251"
 else ifeq ($(CODEPAGE), 12521)
 	ES_ES = 1
 	SCODEPAGE = "iso-8859-1"
@@ -149,6 +163,8 @@ else ifeq ($(UICODEPAGE), 932)
 	JA_JP = 1
 else ifeq ($(UICODEPAGE), 949)
 	KO_KR = 1
+else ifeq ($(UICODEPAGE), 12511)
+	RU_RU = 1
 else ifeq ($(UICODEPAGE), 12521)
 	ES_ES = 1
 else ifeq ($(UICODEPAGE), 12522)
@@ -338,20 +354,23 @@ AS_DEFS +=
 
 # C defines
 C_DEFS +=  \
+-D_GNU_SOURCE \
 -DINTFLASH_BANK=$(INTFLASH_BANK) \
 -DBIG_BANK=$(BIG_BANK) \
+-DEXTFLASH_SIZE=$(EXTFLASH_SIZE) \
+-DOFF_SAVESTATE=$(OFF_SAVESTATE) \
 -DCODEPAGE=$(CODEPAGE) \
 -DUICODEPAGE=$(UICODEPAGE) \
 -DINCLUDED_ES_ES=$(ES_ES) \
 -DINCLUDED_PT_PT=$(PT_PT) \
 -DINCLUDED_FR_FR=$(FR_FR) \
 -DINCLUDED_IT_IT=$(IT_IT) \
+-DINCLUDED_DE_DE=$(DE_DE) \
+-DINCLUDED_RU_RU=$(RU_RU) \
 -DINCLUDED_ZH_CN=$(ZH_CN) \
 -DINCLUDED_ZH_TW=$(ZH_TW) \
 -DINCLUDED_KO_KR=$(KO_KR) \
 -DINCLUDED_JA_JP=$(JA_JP) \
--DINCLUDED_DE_DE=$(DE_DE) \
--DONEFONT=$(FONT) \
 -DLANG=$(LANG) \
 -DCOVERFLOW=$(COVERFLOW) \
 -DEXTFLASH_FORCE_SPI=$(EXTFLASH_FORCE_SPI) \
@@ -365,7 +384,17 @@ C_DEFS +=  \
 -DENABLE_SCREENSHOT=$(ENABLE_SCREENSHOT) \
 -DGNW_TARGET_MARIO=$(GNW_TARGET_MARIO) \
 -DGNW_TARGET_ZELDA=$(GNW_TARGET_ZELDA) \
--DGAME_GENIE=$(GAME_GENIE) \
+-DCHEAT_CODES=$(CHEAT_CODES) \
+-DTARGET_GNW \
+-DNO_EMBEDDED_SAMPLES \
+-D__LIBRETRO__ \
+-DZ80_CUSTOM_CONFIGURATION \
+-DMSX_NO_ZIP \
+-DMSX_NO_FILESYSTEM \
+-DMSX_NO_MALLOC \
+-DMAX_VIDEO_WIDTH_320 \
+-DPIXEL_WIDTH=8 \
+-DMSX_NO_STEREO
 
 # AS includes
 AS_INCLUDES +=
@@ -378,7 +407,12 @@ C_INCLUDES +=  \
 -ICore/Inc/porting/nes \
 -ICore/Inc/porting/smsplusgx \
 -ICore/Inc/porting/pce \
+-ICore/Inc/porting/msx \
+-ICore/Inc/porting/wsv \
 -ICore/Inc/porting/gw \
+-ICore/Inc/porting/gwenesis \
+-ICore/Inc/porting/a7800 \
+-ICore/Inc/porting/amstrad \
 -ICore/Inc/retro-go \
 -IDrivers/STM32H7xx_HAL_Driver/Inc \
 -IDrivers/STM32H7xx_HAL_Driver/Inc/Legacy \
@@ -435,7 +469,7 @@ LIBDIR +=
 LDFLAGS += $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
 
 # default action: build all
-all: CheckTools CheckDirtySubmodules $(BUILD_DIR) $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET)_extflash.bin $(BUILD_DIR)/$(TARGET)_intflash.bin
+all: CheckTools CheckDirtySubmodules $(BUILD_DIR) $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET)_extflash.bin $(BUILD_DIR)/$(TARGET)_intflash.bin $(BUILD_DIR)/$(TARGET)_intflash2.bin
 
 #######################################
 # build the application
@@ -447,8 +481,13 @@ NES_OBJECTS = $(addprefix $(BUILD_DIR)/nes/,$(notdir $(NES_C_SOURCES:.c=.o)))
 SMSPLUSGX_OBJECTS = $(addprefix $(BUILD_DIR)/smsplusgx/,$(notdir $(SMSPLUSGX_C_SOURCES:.c=.o)))
 PCE_OBJECTS = $(addprefix $(BUILD_DIR)/pce/,$(notdir $(PCE_C_SOURCES:.c=.o)))
 GW_OBJECTS = $(addprefix $(BUILD_DIR)/gw/,$(notdir $(GW_C_SOURCES:.c=.o)))
+MSX_OBJECTS = $(addprefix $(BUILD_DIR)/msx/,$(notdir $(MSX_C_SOURCES:.c=.o)))
+WSV_OBJECTS = $(addprefix $(BUILD_DIR)/wsv/,$(notdir $(WSV_C_SOURCES:.c=.o)))
+MD_OBJECTS = $(addprefix $(BUILD_DIR)/md/,$(notdir $(MD_C_SOURCES:.c=.o)))
+A7800_OBJECTS = $(addprefix $(BUILD_DIR)/a7800/,$(notdir $(A7800_C_SOURCES:.c=.o)))
+AMSTRAD_OBJECTS = $(addprefix $(BUILD_DIR)/amstrad/,$(notdir $(AMSTRAD_C_SOURCES:.c=.o)))
 
-vpath %.c $(sort $(dir $(C_SOURCES) $(NES_C_SOURCES) $(GNUBOY_C_SOURCES) $(SMSPLUSGX_C_SOURCES) $(PCE_C_SOURCES) $(GW_C_SOURCES) $(SDK_C_SOURCES)))
+vpath %.c $(sort $(dir $(C_SOURCES) $(NES_C_SOURCES) $(GNUBOY_C_SOURCES) $(SMSPLUSGX_C_SOURCES) $(PCE_C_SOURCES) $(MSX_C_SOURCES) $(GW_C_SOURCES) $(WSV_C_SOURCES) $(MD_C_SOURCES) $(A7800_C_SOURCES) $(AMSTRAD_C_SOURCES) $(SDK_C_SOURCES)))
 # list of ASM program objects
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(SDK_ASM_SOURCES:.s=.o)))
 vpath %.s $(sort $(dir $(SDK_ASM_SOURCES)))
@@ -477,15 +516,15 @@ $(BUILD_DIR)/core/rg_main.o: Core/Inc/githash.h
 # Run parse_roms.py to generate information about the roms
 $(BUILD_DIR)/rom_files.txt: FORCE | $(BUILD_DIR)
 	$(V)$(ECHO) [ BASH ] Checking for updated roms
-	$(V)./scripts/update_rom_files.sh build/rom_files.txt roms/gb roms/nes roms/sms roms/gg roms/col roms/pce roms/sg roms/gw
+	$(V)./scripts/update_rom_files.sh build/rom_files.txt roms/gb roms/nes roms/sms roms/gg roms/col roms/pce roms/sg roms/msx roms/gw roms/wsv roms/md roms/a7800 roms/amstrad
 
 $(BUILD_DIR)/roms.a: $(BUILD_DIR)/rom_files.txt parse_roms.py
 	$(V)$(ECHO) [ PYTHON3 ] $(notdir $<)
-	$(V)$(PYTHON3) parse_roms.py --flash-size $(EXTFLASH_SIZE) $(SAVE_PARAM) $(COMPRESS_PARAM) $(CODEPAGE_PARAM) $(COVERFLOW_PARAM) $(JPG_QUALITY_PARAM)
+	$(V)$(PYTHON3) parse_roms.py --flash-size $(EXTFLASH_SIZE) $(SAVE_PARAM) $(COMPRESS_PARAM) $(CODEPAGE_PARAM) $(COVERFLOW_PARAM) $(JPG_QUALITY_PARAM) --off_saveflash=$(OFF_SAVESTATE)
 
-$(BUILD_DIR)/config.h $(BUILD_DIR)/saveflash.ld &: $(BUILD_DIR)/roms.a
+$(BUILD_DIR)/config.h $(BUILD_DIR)/saveflash.ld $(BUILD_DIR)/cacheflash.ld $(BUILD_DIR)/offsaveflash.ld &: $(BUILD_DIR)/roms.a
 	$(V)/bin/sh -c true
-STM32H7B0VBTx_FLASH.ld: $(BUILD_DIR)/saveflash.ld
+STM32H7B0VBTx_FLASH.ld: $(BUILD_DIR)/offsaveflash.ld $(BUILD_DIR)/saveflash.ld $(BUILD_DIR)/cacheflash.ld
 
 # rom_manager.c depends on the different *_roms.c files but they only change when roms.a changes
 $(BUILD_DIR)/core/rom_manager.o: Core/Src/retro-go/rom_manager.c $(BUILD_DIR)/roms.a
@@ -545,34 +584,54 @@ $(BUILD_DIR)/%.o: %.s Makefile.common Makefile $(BUILD_DIR)/config.h | $(BUILD_D
 	$(V)$(ECHO) [ AS ] $(notdir $<)
 	$(V)$(AS) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) $(NES_OBJECTS) $(GNUBOY_OBJECTS) $(SMSPLUSGX_OBJECTS) $(PCE_OBJECTS) $(GW_OBJECTS) Makefile.common Makefile $(LDSCRIPT)
+$(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) $(A7800_OBJECTS) $(NES_OBJECTS) $(GNUBOY_OBJECTS) $(SMSPLUSGX_OBJECTS) $(PCE_OBJECTS) $(MSX_OBJECTS) $(GW_OBJECTS) $(WSV_OBJECTS) $(MD_OBJECTS) $(AMSTRAD_OBJECTS) Makefile.common Makefile $(LDSCRIPT)
 	$(V)$(ECHO) [ LD ] $(notdir $@)
-	$(V)$(CC) $(OBJECTS) $(NES_OBJECTS) $(GNUBOY_OBJECTS) $(SMSPLUSGX_OBJECTS) $(PCE_OBJECTS) $(GW_OBJECTS) $(LDFLAGS) -o $@
+	$(V)$(CC) $(OBJECTS) $(A7800_OBJECTS) $(NES_OBJECTS) $(GNUBOY_OBJECTS) $(SMSPLUSGX_OBJECTS) $(PCE_OBJECTS) $(MSX_OBJECTS) $(GW_OBJECTS) $(WSV_OBJECTS) $(MD_OBJECTS) $(AMSTRAD_OBJECTS) $(LDFLAGS) -o $@
 	$(V)./scripts/extflash_size.sh $@
 
-$(BUILD_DIR)/core/%.o: %.c Makefile Makefile.common $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+$(BUILD_DIR)/core/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
 	$(V)$(ECHO) [ CC core ] $(notdir $<)
 	$(V)$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/core/$(notdir $(<:.c=.lst)) $< -o $@
 
-$(BUILD_DIR)/nes/%.o: %.c Makefile Makefile.common $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+$(BUILD_DIR)/nes/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
 	$(V)$(ECHO) [ CC nes ] $(notdir $<)
-	$(V)$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/nes/$(notdir $(<:.c=.lst)) $< -o $@
+	$(V)$(CC) -c $(CFLAGS) $(NES_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/nes/$(notdir $(<:.c=.lst)) $< -o $@
 
-$(BUILD_DIR)/gnuboy/%.o: %.c Makefile Makefile.common $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+$(BUILD_DIR)/gnuboy/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
 	$(V)$(ECHO) [ CC gb ] $(notdir $<)
-	$(V)$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/gnuboy/$(notdir $(<:.c=.lst)) $< -o $@
+	$(V)$(CC) -c $(CFLAGS) $(GNUBOY_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/gnuboy/$(notdir $(<:.c=.lst)) $< -o $@
 
-$(BUILD_DIR)/smsplusgx/%.o: %.c Makefile Makefile.common $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+$(BUILD_DIR)/smsplusgx/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
 	$(V)$(ECHO) [ CC sms ] $(notdir $<)
-	$(V)$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/smsplusgx/$(notdir $(<:.c=.lst)) $< -o $@
+	$(V)$(CC) -c $(CFLAGS) $(SMSPLUSGX_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/smsplusgx/$(notdir $(<:.c=.lst)) $< -o $@
 
-$(BUILD_DIR)/pce/%.o: %.c Makefile Makefile.common $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+$(BUILD_DIR)/pce/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
 	$(V)$(ECHO) [ CC pce ] $(notdir $<)
-	$(V)$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/pce/$(notdir $(<:.c=.lst)) $< -o $@
+	$(V)$(CC) -c $(CFLAGS) $(PCE_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/pce/$(notdir $(<:.c=.lst)) $< -o $@
 
-$(BUILD_DIR)/gw/%.o: %.c Makefile Makefile.common $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+$(BUILD_DIR)/msx/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC msx ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(MSX_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/msx/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/gw/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
 	$(V)$(ECHO) [ CC gw ] $(notdir $<)
-	$(V)$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/gw/$(notdir $(<:.c=.lst)) $< -o $@
+	$(V)$(CC) -c $(CFLAGS) $(GW_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/gw/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/wsv/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC wsv ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(WSV_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/wsv/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/md/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC md ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(MD_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/md/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/a7800/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC a7800 ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(A7800_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/a7800/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/amstrad/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC amstrad CPC ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(AMSTRAD_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/amstrad/$(notdir $(<:.c=.lst)) $< -o $@
 
 $(BUILD_DIR):
 	$(V)mkdir $@
@@ -581,7 +640,12 @@ $(BUILD_DIR):
 	$(V)mkdir $@/gnuboy
 	$(V)mkdir $@/smsplusgx
 	$(V)mkdir $@/pce
+	$(V)mkdir $@/msx
 	$(V)mkdir $@/gw
+	$(V)mkdir $@/wsv
+	$(V)mkdir $@/md
+	$(V)mkdir $@/a7800
+	$(V)mkdir $@/amstrad
 
 #######################################
 # Flashing
@@ -645,7 +709,16 @@ flash_intflash: $(BUILD_DIR)/$(TARGET)_intflash.bin
 # Flashes using an existing openocd instance
 flash_intflash_nc: $(BUILD_DIR)/$(TARGET)_intflash.bin
 	echo "program $< $(INTFLASH_ADDRESS) verify reset" | nc -c localhost 4444
-.PHONY: flashx
+.PHONY: flash_intflash_nc
+
+flash_intflash2: $(BUILD_DIR)/$(TARGET)_intflash2.bin
+#	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "program $< 0x08100000 verify reset exit"
+.PHONY: flash_intflash2
+
+# Flashes using an existing openocd instance
+flash_intflash2_nc: $(BUILD_DIR)/$(TARGET)_intflash2.bin
+	echo "program $< 0x08100000 verify reset" | nc -c localhost 4444
+.PHONY: flash_intflash2_nc
 
 flash_extflash: $(BUILD_DIR)/$(TARGET)_extflash.bin
 	$(FLASH_MULTI) $(BUILD_DIR)/$(TARGET)_extflash.bin $(EXTFLASH_OFFSET)
@@ -658,6 +731,9 @@ flash_test: flash_intflash
 # Programs both the external and internal flash.
 flash: CheckTools CheckDirtySubmodules
 	$(V)$(MAKE) flash_intflash
+ifeq ($(INTFLASH_BANK), 1)
+	$(V)$(MAKE) flash_intflash2
+endif
 	$(V)$(MAKE) flash_extflash
 	$(V)$(RESET_DBGMCU_CMD)
 .PHONY: flash
@@ -742,21 +818,22 @@ help:
 	@echo "  RESET_DBGMCU        - Configures if DBGMCU should be reset after flashing."
 	@echo "                        Set to 0 to disable power saving (default=1)"
 	@echo "  CODEPAGE            - Sets codepage to configures default display language.(default=1252)"
-	@echo "                        set 932 as Japanese; 936 as simple Chinese; 950 as traditional Chinese"
-	@echo "                        949 as Korean; 12521 as Spanish; 12522 as Portuguese; 12523 as French;"
-	@echo "                        12524 as Italian; 12525 as German;"
+	@echo "                        set 932 as Japanese; 936 as simple Chinese; 950 as traditional Chinese;"
+	@echo "                        949 as Korean; 12511 as Russian; 12521 as Spanish; 12522 as Portuguese;"
+	@echo "                        12523 as French; 12524 as Italian; 12525 as German;"
 	@echo "  UICODEPAGE          - Sets ui display language.(default=CODEPAGE=1252 as English)"
 	@echo "  ROMINFOCODE         - Sets encoding of parse rom name, default = ascii"
 	@echo "  ES_ES,PT_PT,FR_FR,  "
 	@echo "  IT_IT,ZH_CN,ZH_TW,  "
-	@echo "  KO_KR,JA_JP,DE_DE   - Set to 1 to include or exclude some other language"
-	@echo "  FONT                - Only persist one font and set the font number. "
-	@echo "                        Font effect see: Core\\Inc\\retro-go\\fonts\\font_un_xx.h"
+	@echo "  KO_KR,JA_JP,DE_DE,  "
+	@echo "  RU_RU               - Set to 1 to include or exclude some other language"
 	@echo "  COVERFLOW           - Set to 1 include cover art with rom (default=0)"
 	@echo "  JPG_QUALITY         - Set convert cover art image jpg quality (default = 90)"
 	@echo "  ENABLE_SCREENSHOT   - Set to 1 to enable screenshot support (default disabled if extflash is 1MB)"
 	@echo "  GNW_TARGET          - Game & Watch target, Valid values {mario,zelda} (default=mario)"
-	@echo "  GAME_GENIE   - Set to 1 to enable game genie support (default=0)"
+	@echo "  GAME_GENIE          - Set to 1 to enable game genie support (deprecated, use CHEAT_CODES instead)"
+	@echo "  CHEAT_CODES         - Set to 1 to enable cheat codes support (default=0)"
+	@echo "  SHARED_HIBERNATE_SAVESTATE - Set to 1 to enable a separate savestate for off/on (default=0)"
 	@echo ""
 	@echo "Current configuration:"
 	@echo "  EXTFLASH_FORCE_SPI=$(EXTFLASH_FORCE_SPI)"
@@ -771,23 +848,24 @@ help:
 	@echo "  RESET_DBGMCU=$(RESET_DBGMCU)"
 	@echo "  ENABLE_SCREENSHOT=$(ENABLE_SCREENSHOT)"
 	@echo "  GNW_TARGET=$(GNW_TARGET)"
-	@echo "  GAME_GENIE=$(GAME_GENIE)"
+	@echo "  CHEAT_CODES=$(CHEAT_CODES)"
 	@echo "  GCC_PATH=$(GCC_PATH)"
 	@echo "  PREFIX=$(PREFIX)"
 	@echo "  CODEPAGE=$(CODEPAGE)"
 	@echo "  UICODEPAGE=$(UICODEPAGE)"
 	@echo "  COVERFLOW=$(COVERFLOW)"
 	@echo "  ROMINFOCODE=$(ROMINFOCODE)"
+	@echo "  SHARED_HIBERNATE_SAVESTATE=$(SHARED_HIBERNATE_SAVESTATE)"
 	@echo "  ES_ES=$(ES_ES)"
 	@echo "  PT_PT=$(PT_PT)"
 	@echo "  FR_FR=$(FR_FR)"
 	@echo "  IT_IT=$(IT_IT)"
 	@echo "  DE_DE=$(DE_DE)"
+	@echo "  RU_RU=$(RU_RU)"
 	@echo "  ZH_CN=$(ZH_CN)"
 	@echo "  ZH_TW=$(ZH_TW)"
 	@echo "  KO_KR=$(KO_KR)"
 	@echo "  JA_JP=$(JA_JP)"
-	@echo "  FONT=$(FONT)"
 	@echo ""
 	@echo "Targets:"
 	@echo "  docker            - Runs a docker container using the image created by docker_build"
