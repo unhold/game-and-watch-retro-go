@@ -1,5 +1,5 @@
 #include <odroid_system.h>
-
+             
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -466,6 +466,10 @@ void pce_osd_gfx_blit(bool drawFrame) {
     static uint32_t lastFPSTime = 0;
     static uint32_t frames = 0;
     static int wantedTime = 1000 / 60;
+    float xScaleDown = 0;
+    float xScaleUp = 0;
+    int y=0, offsetY, offsetX = 0;
+    uint8_t *fbTmp;
 
     if (!drawFrame) {
         memset(fb_data,0,sizeof(fb_data));
@@ -475,6 +479,23 @@ void pce_osd_gfx_blit(bool drawFrame) {
     uint32_t currentTime = HAL_GetTick();
     uint32_t delta = currentTime - lastFPSTime;
 
+
+
+    odroid_display_scaling_t scaling = ODROID_DISPLAY_SCALING_OFF;
+
+    if (WIDTH<current_width) 
+        xScaleDown = (float) current_width / (float) WIDTH ;
+    else if (WIDTH>current_width && scaling != ODROID_DISPLAY_SCALING_OFF) 
+        xScaleUp = (float) WIDTH / (float) current_width ;
+    else offsetX = (WIDTH - current_width)/2; //center the image horizontally
+
+    offsetX = 0;
+
+   int renderHeight = (current_height<=HEIGHT)?current_height:HEIGHT;
+
+    uint8_t *emuFrameBuffer = osd_gfx_framebuffer();
+    pixel_t *framebuffer_active = fb_data;//lcd_get_active_buffer();
+
     if (delta >= 1000) {
         framePerSecond = (10000 * frames) / delta;
         printf("FPS: %d.%d, frames %d, delta %d ms\n", framePerSecond / 10, framePerSecond % 10, frames, delta);
@@ -482,25 +503,34 @@ void pce_osd_gfx_blit(bool drawFrame) {
         lastFPSTime = currentTime;
     }
 
-    uint8_t *emuFrameBuffer = osd_gfx_framebuffer();
-    pixel_t *framebuffer_active = fb_data;//lcd_get_active_buffer();
-    int y=0, offsetY;
-    uint8_t *fbTmp;
-
-    for(y=0;y<current_height;y++) {
+    for(y=0;y<renderHeight;y++) {
         fbTmp = emuFrameBuffer+(y*XBUF_WIDTH);
         offsetY = y*current_width;
-        // No scaling, 1:1
-        for(int x=0;x<current_width;x++) {
-               framebuffer_active[offsetY+x]=mypalette[fbTmp[x]];
+        if (xScaleUp) {
+            // Horizontal - Scale up
+            for(int x=0;x<WIDTH;x++) {
+                int input_x = (int) (x / xScaleUp);
+                framebuffer_active[offsetY+x]=mypalette[fbTmp[input_x]];
+            }
+        } else if (xScaleDown) {
+            // Horizontal - Scale down
+            for(int x=0;x<WIDTH;x++) {
+                int input_x = (int) (x * xScaleDown);
+                framebuffer_active[offsetY+x]= mypalette[fbTmp[input_x]];
+            }
+        } else {
+            // No scaling, 1:1
+            for(int x=0;x<current_width;x++) {
+                framebuffer_active[offsetY+x+offsetX]=mypalette[fbTmp[x]];
+            }
         }
     }
-    // Temporary, Y scaling is not yet implemented
+    //* Temporary, Y scaling is not yet implemented
     /*for(;y<HEIGHT;y++) {
         fbTmp = emuFrameBuffer+(y*XBUF_WIDTH);
         offsetY = y*WIDTH;
         for(int x=0;x<WIDTH;x++) {
-            framebuffer_active[offsetY+x]=0;
+            framebuffer_active[offsetY+x+offsetX]=0;
         }
     }*/
 
