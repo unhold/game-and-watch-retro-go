@@ -736,17 +736,17 @@ void app_check_data_loop()
 
 void app_start_logo()
 {
-    const retro_logo_image* logos[] =   {&logo_nintendo, &logo_sega,     &logo_nintendo, &logo_sega,  &logo_nintendo, &logo_pce,    &logo_sega,  &logo_coleco, &logo_microsoft, &logo_watara, &logo_sega,  &logo_atari,   &logo_amstrad};
-    const retro_logo_image* headers[] = {&header_gb,    &header_sg1000, &header_nes,   &header_gg,  &header_gw,    &header_pce,  &header_sms, &header_col,  &header_msx,     &header_wsv,  &header_gen, &header_a7800, &header_amstrad};
+    //const retro_logo_image *logos[] = {&logo_nintendo, &logo_sega, &logo_nintendo, &logo_sega, &logo_nintendo, &logo_pce, &logo_sega, &logo_coleco, &logo_microsoft, &logo_watara, &logo_sega, &logo_atari, &logo_amstrad};
+    const retro_logo_image *headers[] = {&header_gw, &header_nes, &header_gb, &header_gw, &header_nes, &header_gb};
     odroid_overlay_draw_fill_rect(0, 0, ODROID_SCREEN_WIDTH, ODROID_SCREEN_HEIGHT, curr_colors->bg_c);
-    for (int i = 0; i < 13; i++)
+    for (int i = 0; i < sizeof(headers)/sizeof(headers[0]); i++)
     {
         odroid_overlay_draw_fill_rect(0, 0, ODROID_SCREEN_WIDTH, ODROID_SCREEN_HEIGHT, curr_colors->bg_c);
-        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - ((retro_logo_image *)(headers[i]))->width) / 2, 90, (retro_logo_image *)(headers[i]), curr_colors->sel_c);
-        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - ((retro_logo_image *)(logos[i]))->width) / 2, 160 + (40 - ((retro_logo_image *)(logos[i]))->height) / 2, (retro_logo_image *)(logos[i]), curr_colors->dis_c);
+        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - headers[i]->width) / 2, 90, headers[i], curr_colors->sel_c);
+        odroid_overlay_draw_logo((ODROID_SCREEN_WIDTH - logo_nintendo.width) / 2, 160 + (40 - logo_nintendo.height) / 2, &logo_nintendo, curr_colors->dis_c);
         lcd_sync();
         lcd_swap();
-        for (int j = 0; j < 5; j++)
+        for (int j = 0; j < 10; j++)
         {
             wdog_refresh();
             HAL_Delay(10);
