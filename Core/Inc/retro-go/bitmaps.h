@@ -44,7 +44,7 @@ extern const retro_logo_image pad_a7800;
 extern const retro_logo_image pad_amstrad;
 
 extern const retro_logo_image logo_coleco;
-extern const retro_logo_image logo_nitendo;
+extern const retro_logo_image logo_nintendo;
 extern const retro_logo_image logo_sega;
 extern const retro_logo_image logo_pce;
 extern const retro_logo_image logo_microsoft;

@@ -1228,7 +1228,7 @@ const retro_logo_image logo_coleco LOGO_DATA = {
     },
 };
 
-const retro_logo_image logo_nitendo LOGO_DATA = {
+const retro_logo_image logo_nintendo LOGO_DATA = {
 #if (INCLUDED_ZH_CN == 1) || (INCLUDED_ZH_TW == 1)
     56,
     16,
